@@ -1,6 +1,6 @@
 /**
  * Builds the pre-rendered pages from NovaDB and builds them again whenever the branch changes, then publishes the build
- * in the shared folder (`SHARE_DIR`): `builds/{id}` and, last, the pointer `current.json`, which `scripts/sync.mjs`
+ * in the shared folder (`SHARE_DIR`): `builds/{id}` and, last, the pointer file `current`, which `scripts/sync.mjs`
  * (Caddy's copy) and `scripts/start.mjs` (the API) follow. Then it has every picture the pages show made once
  * (`media/`, see `src/lib/media.ts`). The Delivery API reports a change as the counter `changeTrackingVersion` of
  * `GET branches/{branch}/updateInfo` (a 304 for as long as it stands still). The counter moves with every transaction of
@@ -45,15 +45,45 @@ async function changeVersion() {
   return (await res.json()).changeTrackingVersion;
 }
 
-/** Builds into a folder of its own below `site/builds`; returns its name, `{version}-{time}`, the build's id. */
+/** Builds into a folder of its own below `site/builds`; returns its name, `{version}-{time}`, the build's id, and how long `astro build` took. */
 async function build(version) {
   const id = `${version}-${Date.now()}`;
   const out = path.join(site, "builds", id);
+  const started = Date.now();
   await new Promise((resolve, reject) =>
     spawn(process.execPath, [astro, "build"], { env: { ...process.env, BUILD_OUT: out }, stdio: "inherit" })
       .on("exit", (status) => (status === 0 ? resolve() : reject(new Error(`astro build exited with ${status}`)))),
   );
-  return id;
+  return { id, seconds: (Date.now() - started) / 1000 };
+}
+
+/** Linked from nowhere, and `robots.txt` asks crawlers to stay out: a page for whoever knows the address. */
+const INFO_FILE = "_build-info.txt";
+
+/** Writes what a build made into a text file that is served with the pages: the files by kind, the pictures the pages show, when, and how long it took. */
+async function writeInfo(client, { version, seconds, names }) {
+  const count = { html: 0, css: 0, js: 0 };
+  const walk = async (dir) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) await walk(path.join(dir, entry.name));
+      else count[{ ".html": "html", ".css": "css", ".js": "js", ".mjs": "js" }[path.extname(entry.name)]]++;
+    }
+  };
+  await walk(client);
+  const variants = names.filter((name) => name.includes("/")).length;
+  const lines = [
+    `built         ${new Date().toISOString()}`,
+    `build time    ${seconds.toFixed(1)} s (astro build, from NovaDB's data to the files)`,
+    `change count  ${version} (changeTrackingVersion of branch ${DEMO_BRANCH})`,
+    `code version  ${code}`,
+    "",
+    `html pages    ${count.html}`,
+    `css files     ${count.css}`,
+    `js files      ${count.js}`,
+    `pictures      ${names.length - variants} originals the pages show`,
+    `variants      ${variants} scaled copies (WebP, made once per picture and width after the build)`,
+  ];
+  await writeFile(path.join(client, INFO_FILE), `${lines.join("\n")}\n`);
 }
 
 /** Writes `file` through a temporary file and a rename: a reader sees the old content or the new, never half. */
@@ -62,7 +92,7 @@ async function writeAtomic(file, content) {
   await rename(`${file}.tmp`, file);
 }
 
-/** Copies the build to the share, then points `current.json` at it: whoever reads the pointer finds all of the build. */
+/** Copies the build to the share, then points the pointer file at it: whoever reads the pointer finds all of the build. */
 async function publish(id) {
   const target = path.join(share, "builds", id);
   await rm(`${target}.partial`, { recursive: true, force: true });
@@ -139,8 +169,10 @@ for (;;) {
     }
     const version = (await changeVersion()) ?? seen;
     try {
-      const id = await build(version);
-      const names = await mediaOf(path.join(site, "builds", id, "client"));
+      const { id, seconds } = await build(version);
+      const client = path.join(site, "builds", id, "client");
+      const names = await mediaOf(client);
+      await writeInfo(client, { version, seconds, names });
       await publish(id);
       built = version;
       await prune(id);

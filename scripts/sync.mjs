@@ -1,6 +1,6 @@
 /**
  * Keeps the folder Caddy serves (`SITE_DIR`, local to its pod) equal to what the builder publishes in the shared
- * folder (`SHARE_DIR`): the pages of the build `current.json` names, `_astro` of every build, and the pictures. Caddy
+ * folder (`SHARE_DIR`): the pages of the build the pointer file names, `_astro` of every build, and the pictures. Caddy
  * reads local files only, so the shared folder is never in the path of a request. `SITE_DIR/current` appears when the
  * first copy is complete; the container's startup probe waits for it, so no pod takes requests without its pages.
  */
@@ -14,7 +14,7 @@ const POLL_MS = Number(process.env.SYNC_SECONDS ?? 5) * 1000;
 /** Pictures made while no build changed (the API makes any that is asked for) are picked up this often. */
 const MEDIA_MS = Number(process.env.MEDIA_SYNC_SECONDS ?? 60) * 1000;
 
-/** The id of the build `current.json` names, undefined while there is none. */
+/** The id of the build the pointer file names, undefined while there is none. */
 async function published() {
   try {
     return JSON.parse(await readFile(path.join(share, "current.json"), "utf-8")).id;
