@@ -1,0 +1,19 @@
+---
+// A CMS page (content and live range) or a product: what the route that pre-renders it and the one that answers its posted form both print.
+import { seoOf } from "../lib/seo";
+import type { PageData } from "../lib/page-data";
+import Layout from "../layouts/Layout.astro";
+import Content from "./Content.astro";
+import Crumbs from "./Crumbs.astro";
+import ProductDetail from "./ProductDetail.astro";
+import Range from "./Range.astro";
+
+interface Props { data: PageData }
+const { data } = Astro.props;
+---
+<Layout region={data.region} title={data.title} seo={seoOf(data.canonical, data.alternates)} alternates={data.alternates}>
+  <Crumbs items={data.crumbs} label={data.ctx.text.breadcrumb} />
+  {data.kind === "product"
+    ? <ProductDetail ctx={data.ctx} product={data.product} groupName={data.groupName} similar={data.similar} />
+    : <Content node={data.content} ctx={data.ctx}>{data.range && <Range range={data.range} ctx={data.ctx} groupNames={data.groupNames} />}</Content>}
+</Layout>

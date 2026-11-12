@@ -1,0 +1,16 @@
+---
+// The breadcrumb of a page or product: the trail from the home page, the last item being the page itself. The home page has none.
+import type { Target } from "../lib/content";
+
+interface Props { items: Target[]; label: string }
+const { items, label } = Astro.props;
+---
+{items.length > 1 && (
+  <nav class="crumbs" aria-label={label}>
+    <ol>
+      {items.map((item, i) => (
+        <li>{i === items.length - 1 ? <span aria-current="page">{item.title}</span> : <a href={item.url}>{item.title}</a>}</li>
+      ))}
+    </ol>
+  </nav>
+)}

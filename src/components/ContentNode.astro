@@ -1,0 +1,35 @@
+---
+import { CHAPTER_SIZES, CONTENT_SIZES, TEASER_SIZES } from "../lib/sizes";
+import { rewriteLinks, type ContentCtx } from "../lib/content";
+import { srcSet } from "../lib/images";
+import type { VNode } from "../lib/site";
+import ProductCard from "./ProductCard.astro";
+
+interface Props { node: VNode; ctx: ContentCtx; sizes?: string }
+const { node, ctx, sizes = CONTENT_SIZES } = Astro.props;
+const Tag = (node.element || "div") as "div"; // the CMS names the element; typed as one so that its attributes check
+// A chapter hands its own `sizes` to its children, and the picture's figure on to the picture; any other group starts again.
+const childSizes = node.class === "merchChapter" ? CHAPTER_SIZES : node.class === "imageWithCaption" ? sizes : CONTENT_SIZES;
+const image = node.type === "image" && node.objectId ? ctx.images[node.objectId] : undefined;
+const product = node.type === "object" && node.objectId ? ctx.products[node.objectId] : undefined;
+const target = node.type === "object" && node.objectId ? ctx.targets[node.objectId] : undefined;
+---
+{node.type === "group" ? (
+  <Tag class={node.class}>{node.children?.map((child) => <Astro.self node={child} ctx={ctx} sizes={childSizes} />)}</Tag>
+) : node.type === "image" ? (
+  image && <img class={node.class} src={image} srcset={srcSet(image)} sizes={sizes} alt="" loading="lazy" />
+) : node.type === "object" ? (
+  // Like the CMS, which wraps what an object component renders in the component's own element: the editor's
+  // stylesheet (built from site.css) then matches the same DOM as the site.
+  product ? <Tag class={node.class}><ProductCard product={product} ctx={ctx} /></Tag>
+  : target ? (
+    <Tag class={node.class}>
+      <a class="page-teaser" href={target.url}>
+        {target.image && <img src={target.image} srcset={srcSet(target.image)} sizes={TEASER_SIZES} alt="" loading="lazy" />}
+        <span class="page-teaser__title">{target.title}</span>
+      </a>
+    </Tag>
+  ) : null
+) : (
+  <Tag class={node.class} set:html={rewriteLinks(node.content ?? "", ctx.targets)} />
+)}

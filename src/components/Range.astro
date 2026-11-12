@@ -1,0 +1,62 @@
+---
+// A live product range: facet filters as a plain POST form (the URL stays the page's), sorting and the product grid.
+// Without JavaScript every change is a form the browser posts, answered by the page; with it site.js posts the same form
+// and replaces this section by the answer's.
+import type { Ctx } from "../lib/content";
+import { RANGE_BATCH, SORTS, type RangeData, type Sort } from "../lib/products";
+import Facet from "./Facet.astro";
+import ProductCard from "./ProductCard.astro";
+
+interface Props {
+  range: RangeData;
+  ctx: Ctx;
+  /** Product groups by ID, for the group facet. */
+  groupNames: Map<number, string>;
+  /** The search query on the search page: the range form posts it again. */
+  query?: string;
+}
+const { range, ctx, groupNames, query } = Astro.props;
+const { items, total, facets, selection, defaultSort } = range;
+const { text } = ctx;
+const sortLabel: Record<Sort, string> = { relevance: text.sortRelevance, name: text.sortName, "price-asc": text.sortPriceAsc, "price-desc": text.sortPriceDesc };
+// "relevance" is offered only where it is the default: a search with usable terms.
+const sorts = SORTS.filter((s) => s !== "relevance" || defaultSort === "relevance");
+const currentSort = selection.sort ?? defaultSort;
+---
+<section class="range" id="range" aria-label={text.filter}>
+  <form class="facets" id="facets" method="post" action="#range" data-autosubmit="true">
+    {query && <input type="hidden" name="q" value={query} />}
+    {facets.group.length > 1 && <Facet legend={text.group} name="group" values={facets.group.filter((v) => groupNames.has(Number(v.value)))} labelOf={(v) => groupNames.get(Number(v))!} />}
+    <Facet legend={text.colour} name="color" values={facets.color} labelOf={text.value} swatchOf={text.swatch} />
+    <Facet legend={text.material} name="material" values={facets.material} labelOf={text.value} />
+    <fieldset class="facet">
+      <legend>{text.availability}</legend>
+      <label class="facet__option"><input type="checkbox" name="stock" value="1" checked={selection.stock} /><span>{text.inStock}</span><span class="facet__count">{facets.inStock}</span></label>
+    </fieldset>
+    <fieldset class="facet facet--price">
+      <legend>{text.price}</legend>
+      <label><span>{text.from}</span><input type="number" name="min" inputmode="numeric" min="0" placeholder={String(facets.priceMin)} value={selection.min} /></label>
+      <label><span>{text.to}</span><input type="number" name="max" inputmode="numeric" min="0" placeholder={String(facets.priceMax)} value={selection.max} /></label>
+    </fieldset>
+    <div class="facets__actions">
+      <button type="submit" class="button">{text.apply}</button>
+      <button type="submit" name="reset" value="1" class="button button--ghost">{text.reset}</button>
+    </div>
+  </form>
+  <div class="range__main">
+    <div class="range__bar">
+      <p class="range__count" aria-live="polite">{text.results(total)}</p>
+      <label class="range__sort">
+        <span>{text.sort}</span>
+        <select name="sort" form="facets">
+          {sorts.map((s) => <option value={s} selected={s === currentSort}>{sortLabel[s]}</option>)}
+        </select>
+      </label>
+    </div>
+    {total > 0
+      ? <div class="grid">{items.map((p) => <ProductCard product={p} ctx={ctx} />)}</div>
+      : <p class="range__empty">{text.noResults}</p>}
+    {/* Posts the filters again with one batch more; with JavaScript site.js clicks it while scrolling and appends the new cards. */}
+    {total > items.length && <button type="submit" form="facets" name="shown" value={selection.shown + RANGE_BATCH} class="button button--ghost range__more">{text.showMore}</button>}
+  </div>
+</section>

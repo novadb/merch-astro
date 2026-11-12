@@ -1,0 +1,71 @@
+# The site as it runs in production, with the same parts: `builder` builds the pages and the pictures into the volume
+# `share`; `web-sync` copies them into the volume `web-site`, which only `web` (Caddy) reads and serves; `api` answers what
+# needs a request. Each one scales alone (`--scale api=2`, `--scale web=2` needs another published port). The Delivery
+# login, SITE_URL and the Shopify settings come from the environment or `.env` (`.env.example`).
+x-image: &image
+  image: localhost/merch-astro
+
+services:
+  builder:
+    <<: *image
+    build: .
+    command: [node, scripts/watch.mjs]
+    environment:
+      # An api runs only a build made by the same code; every container of this file has the same image.
+      - CODE_VERSION=local
+      - API_URL=http://api:3001
+      - NOVA_DELIVERY_URL
+      - NOVA_DELIVERY_USER
+      - NOVA_DELIVERY_PASSWORD
+      - DEMO_BRANCH
+      - SHOPIFY_DOMAIN
+      - SHOPIFY_STOREFRONT_TOKEN
+      - SITE_URL
+    volumes: [share:/app/share]
+  api:
+    <<: *image
+    command: [node, scripts/start.mjs]
+    environment:
+      - CODE_VERSION=local
+      # `web` is another host here, not localhost as in a pod
+      - API_HOST=0.0.0.0
+      - MEDIA_CACHE_DIR=/app/share/media
+      - NOVA_DELIVERY_URL
+      - NOVA_DELIVERY_USER
+      - NOVA_DELIVERY_PASSWORD
+      - DEMO_BRANCH
+      - SHOPIFY_DOMAIN
+      - SHOPIFY_STOREFRONT_TOKEN
+      - SITE_URL
+    volumes: [share:/app/share]
+  web-sync:
+    <<: *image
+    command: [node, scripts/sync.mjs]
+    # A named volume belongs to whoever mounts it first, and `web` has no `node` user: root writes it either way.
+    user: root
+    volumes:
+      - share:/app/share:ro
+      - web-site:/app/site
+    # Ready when the first copy is complete: `web` starts after that.
+    healthcheck:
+      test: [CMD, test, -e, /app/site/current]
+      interval: 2s
+      retries: 150
+  web:
+    image: docker.io/library/caddy:2.11-alpine
+    environment:
+      - API_ADDRESS=api:3001
+      - SITE_ADDRESS
+      - CADDY_STORAGE=/data
+    ports: ["4002:3000"]
+    volumes:
+      - web-site:/site:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy:/data
+    depends_on:
+      web-sync: { condition: service_healthy }
+
+volumes:
+  share:
+  web-site:
+  caddy:

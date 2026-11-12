@@ -1,0 +1,26 @@
+---
+// A product card. Class names and HTML are read outside this file (site.js reuses cards by their HTML, the shared suite selects `.product-card__*`) and are the same in every demo: change them only together.
+import type { Ctx } from "../lib/content";
+import { formatPrice } from "../lib/i18n";
+import { srcSet } from "../lib/images";
+import type { Product } from "../lib/products";
+import { CARD_SIZES } from "../lib/sizes";
+
+interface Props { product: Product; ctx: Ctx }
+const { product: p, ctx } = Astro.props;
+const details = [
+  p.color && ctx.text.value(p.color), p.volume && `${p.volume} ml`, p.screenSize && `${p.screenSize}″`,
+  ...p.materials.map(ctx.text.value), ...p.finishes.map(ctx.text.value),
+  p.pieces && p.pieces > 1 && ctx.text.pieceCount(p.pieces),
+].filter(Boolean);
+---
+<article class="product-card">
+  <a href={p.url} class="product-card__link">
+    <div class="product-card__media">
+      {p.image && <img src={p.image.src} srcset={srcSet(p.image.src)} sizes={CARD_SIZES} alt={p.name} loading="lazy" width={400} height={400} />}
+    </div>
+    <h3 class="product-card__name">{p.name}</h3>
+    <p class="product-card__meta">{details.join(" · ")}</p>
+    <p class="product-card__price">{formatPrice(p.price, ctx.market, ctx.region)}{p.inStock === false && <span class="badge badge--muted">{ctx.text.soldOut}</span>}</p>
+  </a>
+</article>

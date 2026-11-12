@@ -1,0 +1,103 @@
+# Pull request validation: docker build and the Playwright suite of the reference demo (merch-react-router, its `main`)
+# against the built container and the real Delivery API. Not triggered by this file (`trigger: none`): the
+# build-validation policy on `main` queues it for every PR and makes it a blocking check. The variable group
+# `merch-astro` holds NOVA_DELIVERY_URL, NOVA_DELIVERY_USER and NOVA_DELIVERY_PASSWORD (secret; a secret reaches a
+# script only through `env:`). Shopify is not configured here: the site renders no buy button and no cart, and the tests
+# tagged @shopify run locally only.
+trigger: none
+
+resources:
+  repositories:
+    - repository: suite
+      type: git
+      name: merch-react-router
+      ref: main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  - group: merch-astro
+  # the port compose.yaml publishes
+  - name: PORT
+    value: 4002
+
+steps:
+  - checkout: self
+  - checkout: suite
+
+  # Rules of the pull request itself (branch name, linked work item, merge commit message and its text): scripts/check-pull-request.py.
+  # The secure file lists terms the public commit message must not contain; it is not part of any repository.
+  - task: DownloadSecureFile@1
+    name: termlist
+    displayName: Download the list of terms a commit message must not contain
+    condition: eq(variables['Build.Reason'], 'PullRequest')
+    inputs:
+      secureFile: pr-text-denylist.txt
+
+  - script: python3 scripts/check-pull-request.py --denylist "$(termlist.secureFilePath)"
+    displayName: Check the pull request
+    condition: eq(variables['Build.Reason'], 'PullRequest')
+    workingDirectory: $(Pipeline.Workspace)/s/merch-astro
+    env:
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+  # The three containers of compose.yaml (Caddy, the API, the builder), built from the Dockerfile as in production.
+  - script: docker compose --project-name site up --detach --build
+    displayName: Build and start the site
+    workingDirectory: $(Pipeline.Workspace)/s/merch-astro
+    env:
+      NOVA_DELIVERY_URL: $(NOVA_DELIVERY_URL)
+      NOVA_DELIVERY_USER: $(NOVA_DELIVERY_USER)
+      NOVA_DELIVERY_PASSWORD: $(NOVA_DELIVERY_PASSWORD)
+      SITE_URL: http://localhost:$(PORT)
+
+  # The builder reads every page first (about 15 s).
+  - script: curl -fsS --retry 60 --retry-all-errors --retry-delay 2 -o /dev/null http://localhost:$(PORT)/de/
+    displayName: Wait for the site
+
+  - task: NodeTool@0
+    displayName: Install Node.js
+    inputs:
+      versionSpec: 24.x
+
+  - script: npm ci
+    displayName: Install the suite
+    workingDirectory: $(Pipeline.Workspace)/s/merch-react-router
+
+  - script: npx playwright install --with-deps firefox
+    displayName: Install Firefox for Playwright
+    workingDirectory: $(Pipeline.Workspace)/s/merch-react-router
+
+  # No retries: a red test is a finding. The paths the tests use are CMS data. Left out: the tests tagged @shopify
+  # (Shopify is tested locally until further notice) and the one that does not apply to pre-built pages (README, "Deviations").
+  - script: npx playwright test --grep-invert "@shopify|canonical origin follows the ingress headers" --reporter=line,junit
+    displayName: Playwright suite (Firefox, without @shopify)
+    workingDirectory: $(Pipeline.Workspace)/s/merch-react-router
+    env:
+      BASE_URL: http://localhost:$(PORT)
+      PLAYWRIGHT_JUNIT_OUTPUT_FILE: $(Pipeline.Workspace)/s/merch-react-router/test-results/junit.xml
+
+  - task: PublishTestResults@2
+    displayName: Publish test results
+    condition: always()
+    inputs:
+      testResultsFormat: JUnit
+      testResultsFiles: $(Pipeline.Workspace)/s/merch-react-router/test-results/junit.xml
+      testRunTitle: Playwright (Firefox)
+      failTaskOnFailedTests: false  # the Playwright step already fails the run
+
+  - script: |
+      mkdir -p $(Build.ArtifactStagingDirectory)/failure-output
+      docker compose --project-name site logs > $(Build.ArtifactStagingDirectory)/failure-output/server.log 2>&1 || true
+    workingDirectory: $(Pipeline.Workspace)/s/merch-astro
+      cp -r $(Pipeline.Workspace)/s/merch-react-router/test-results $(Build.ArtifactStagingDirectory)/failure-output/ || true
+    displayName: Collect test output and server log
+    condition: failed()
+
+  - task: PublishPipelineArtifact@1
+    displayName: Publish test output and server log
+    condition: failed()
+    inputs:
+      targetPath: $(Build.ArtifactStagingDirectory)/failure-output
+      artifactName: failure-output

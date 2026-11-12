@@ -1,0 +1,22 @@
+---
+// `/{region}/{path}`: every page and product, rendered once per build. A posted form is answered by `pages/post/[region]/[...path].astro`.
+import type { GetStaticPaths } from "astro";
+import PageView from "../../components/PageView.astro";
+import { loadProducts } from "../../lib/catalog";
+import { MARKET, REGIONS, type Region } from "../../lib/i18n";
+import { loadPage } from "../../lib/page-data";
+import { loadSite } from "../../lib/site";
+
+export const getStaticPaths = (async () => {
+  const perRegion = await Promise.all(REGIONS.map(async (region) => {
+    const [site, products] = await Promise.all([loadSite(region), loadProducts(region, MARKET[region])]);
+    const paths = [...site.byPath.keys(), ...products.map((p) => p.path)];
+    return paths.map((path) => ({ params: { region, path: path || undefined } })); // the home page has no path
+  }));
+  return perRegion.flat();
+}) satisfies GetStaticPaths;
+
+const { region, path = "" } = Astro.params;
+const data = (await loadPage(region as Region, path))!; // `getStaticPaths` lists only what exists
+---
+<PageView data={data} />

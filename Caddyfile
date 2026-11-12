@@ -1,0 +1,93 @@
+# The web server in front, the official Caddy image: every request reaches it. The built pages and the pictures are
+# files in its own folder (`SITE_DIR`, kept equal to the shared folder by `scripts/sync.mjs`), without any logic of ours.
+# What needs a request (a posted form, `/api/*`, a picture not made yet) is passed on to the API (`scripts/start.mjs`)
+# at `API_ADDRESS`.
+#
+# `SITE_ADDRESS` is the address the site answers on. Behind a proxy that ends TLS: `http://<host>:<port>`, which keeps
+# Caddy from asking for a certificate. Where Caddy ends TLS itself: the bare host name (`astro.example.com`), and it gets
+# its certificate from Let's Encrypt. `CADDY_STORAGE` then belongs on a folder that every Caddy instance shares: they
+# take turns asking for one certificate and all use it.
+{
+	admin off
+	# A stopping pod finishes the requests it has; the platform keeps sending a few more for a moment after the signal.
+	grace_period 10s
+	storage file_system {$CADDY_STORAGE:/data}
+	# The settings of Caddy ending TLS itself (`email`), which the operator provides; a Caddyfile cannot have an empty one.
+	import /etc/caddy/tls/*
+}
+
+# The API: a pod that is just starting or stopping is tried again for a moment, on the next one.
+(api) {
+	reverse_proxy {$API_ADDRESS:127.0.0.1:3001} {
+		lb_try_duration 3s
+		lb_try_interval 250ms
+	}
+}
+
+{$SITE_ADDRESS::3000} {
+	encode zstd gzip
+
+	# One URL per page: `/de` → `/de/` (a region's home page, the regions of `src/lib/i18n.ts`) and
+	# `/de/shop/` → `/de/shop`, a foreign query string kept.
+	@home path_regexp home ^/(de|uk|us)$
+	redir @home /{re.home.1}/{?query} 301
+	@slash {
+		path_regexp slash ^(/.+?)/+$
+		not path_regexp ^/(de|uk|us)/$
+	}
+	redir @slash {re.slash.1}{?query} 301
+
+	# Never a file.
+	handle /api/* {
+		import api
+	}
+
+	# Only a GET or HEAD can be a file: a posted form is answered by the API, at the same URL.
+	@read method GET HEAD
+	handle @read {
+		root * {$SITE_DIR:/site}
+
+		# A picture's name is its content, so it never changes: the file is served for good. A picture not made yet
+		# (the builder makes every one the pages show) and a name that is none go to the API, which answers 404.
+		handle /media/* {
+			@stored file {
+				try_files {path}
+			}
+			handle @stored {
+				# The name keeps the original's extension, the scaled file is WebP.
+				@scaled path_regexp ^/media/\d+/
+				header @scaled Content-Type image/webp
+				header Cache-Control "public, max-age=31536000, immutable"
+				file_server
+			}
+			handle {
+				import api
+			}
+		}
+
+		# Named by their content, so cached for good. Every build adds its own here, so an older page still finds its files.
+		handle /_astro/* {
+			root * {$SITE_DIR:/site}/assets
+			header Cache-Control "public, max-age=31536000, immutable"
+			file_server
+		}
+
+		handle {
+			root * {$SITE_DIR:/site}/current
+			# A page may change with the next build: the browser asks again (ETag).
+			@page not path_regexp \.\w+$
+			header @page Cache-Control "no-cache"
+			# `route`: in the order written (Caddy's own order puts the proxy before the file server).
+			route {
+				# `/de/shop` becomes the file `/de/shop/index.html` here, so the file server never redirects a folder to `/de/shop/`.
+				try_files {path} {path}/index.html
+				# `pass_thru`: what is no file goes to the API.
+				file_server {
+					pass_thru
+				}
+				import api
+			}
+		}
+	}
+	import api
+}

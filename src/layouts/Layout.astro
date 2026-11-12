@@ -1,0 +1,76 @@
+---
+// Document, header and footer around every page. `alternates`: the same content in every region, for the region switch.
+import "../styles/site.css";
+import SearchForm from "../components/SearchForm.astro";
+import { HTML_LANG, MARKET, REGION_LABEL, REGIONS, type Region } from "../lib/i18n";
+import type { Seo } from "../lib/seo";
+import { loadShell } from "../lib/shell";
+
+/** This demo's repository on GitHub (`github.com/novadb/<REPO>`), linked from the footer of every page. */
+const REPO = "merch-astro";
+
+interface Props {
+  region: Region;
+  title?: string;
+  /** Canonical and hreflang links; a search result has none. */
+  seo?: Seo;
+  alternates?: Partial<Record<Region, string>>;
+}
+const { region, title, seo, alternates } = Astro.props;
+const { text, home, nav, shop } = await loadShell(region);
+---
+<html lang={HTML_LANG[region]}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{`${title ?? text.siteName} · ${text.siteName}`}</title>
+    {seo && <link rel="canonical" href={seo.canonical} />}
+    {seo?.alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    {shop && <meta name="shopify-domain" content={shop.domain} />}
+    {shop && <meta name="shopify-token" content={shop.token} />}
+  </head>
+  <!-- `data-shop`: a shop is configured; without it site.css hides the place of the buy button. `data-text`: what site.js prints itself. -->
+  <body
+    data-lang={region}
+    data-shop={shop ? "" : undefined}
+    data-text={JSON.stringify({ addToCart: text.addToCart, cart: text.cart, subtotal: text.subtotal, checkout: text.checkout, cartEmpty: text.cartEmpty, cartNotice: text.cartNotice, products: text.products, pages: text.pagesFound, searchAll: text.searchAll })}
+  >
+    <a class="skip" href="#main">{text.skip}</a>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="logo" href={home.url}>{home.title}</a>
+        <nav class="site-nav" aria-label={text.mainNav}>
+          <ul>
+            {nav.map((item) => (
+              <li>
+                <a href={item.url}>{item.title}</a>
+                {item.children.length > 0 && (
+                  <ul class="site-nav__sub">{item.children.map((c) => <li><a href={c.url}>{c.title}</a></li>)}</ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <SearchForm ctx={{ region, market: MARKET[region], text }} />
+        <div class="site-header__tools">
+          <nav class="regions" aria-label={text.region}>
+            {REGIONS.map((r) => r === region
+              ? <span class="regions__item" aria-current="true" title={REGION_LABEL[r].title}>{REGION_LABEL[r].short}</span>
+              : <a class="regions__item" href={alternates?.[r] ?? `/${r}/`} hreflang={HTML_LANG[r]} title={REGION_LABEL[r].title}>{REGION_LABEL[r].short}</a>)}
+          </nav>
+        </div>
+      </div>
+    </header>
+    <main id="main"><slot /></main>
+    <footer class="site-footer">
+      <p set:html={text.poweredBy.html} />
+      <a class="site-footer__repo" href={`https://github.com/novadb/${REPO}`}>{REPO}</a>
+    </footer>
+    <!-- The NovaDB logo in the corner: decoration only, the footer's line names NovaDB in words. -->
+    <aside class="source" aria-hidden="true"></aside>
+    <script>
+      import "../scripts/site.js";
+    </script>
+  </body>
+</html>

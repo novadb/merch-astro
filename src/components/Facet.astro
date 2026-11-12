@@ -1,0 +1,23 @@
+---
+// One facet of a range: a checkbox per value. A value with no hit under the other filters stays listed (the list never changes), but cannot be chosen.
+import type { FacetValue } from "../lib/products";
+
+interface Props {
+  legend: string;
+  /** The form field the checkboxes post. */
+  name: string;
+  values: FacetValue[];
+  labelOf: (value: string) => string;
+  /** The colour of a value's swatch, for the colour facet. */
+  swatchOf?: (value: string) => string | undefined;
+}
+const { legend, name, values, labelOf, swatchOf } = Astro.props;
+---
+{values.length > 0 && (
+  <fieldset class="facet">
+    <legend>{legend}</legend>
+    {values.map((v) => (
+      <label class="facet__option"><input type="checkbox" name={name} value={v.value} checked={v.selected} disabled={v.count === 0 && !v.selected} />{swatchOf && <span class="swatch" style={`--swatch:${swatchOf(v.value)}`} aria-hidden="true"></span>}<span>{labelOf(v.value)}</span><span class="facet__count">{v.count}</span></label>
+    ))}
+  </fieldset>
+)}

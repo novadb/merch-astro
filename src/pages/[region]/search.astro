@@ -1,0 +1,12 @@
+---
+// `/{region}/search` as opened: the search without a query, which lists every product. A posted search is answered by `pages/post/[region]/search.astro`.
+import type { GetStaticPaths } from "astro";
+import SearchView from "../../components/SearchView.astro";
+import { REGIONS, type Region } from "../../lib/i18n";
+import { searchData } from "../../lib/search";
+
+export const getStaticPaths = (() => REGIONS.map((region) => ({ params: { region } }))) satisfies GetStaticPaths;
+
+const data = await searchData(Astro.params.region as Region, new URLSearchParams());
+---
+<SearchView data={data} />

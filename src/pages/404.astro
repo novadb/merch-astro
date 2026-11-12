@@ -1,0 +1,14 @@
+---
+// Unknown pages and regions. One file for the whole site, so it is in US English.
+import Layout from "../layouts/Layout.astro";
+import { loadText } from "../lib/page-data";
+
+const text = await loadText("us");
+---
+<Layout region="us" title={text.notFound}>
+  <section class="merchHero not-found">
+    <h1 class="merchDisplay">{text.notFound}</h1>
+    <p class="merchLead" set:html={text.notFoundText.html} />
+    <p class="merchCta"><a href="/us/">{text.home}</a></p>
+  </section>
+</Layout>

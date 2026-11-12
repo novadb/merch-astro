@@ -1,0 +1,25 @@
+---
+// The search page: the large search form, the pages that match and the products as a range. No canonical or hreflang: internal search results are not meant to be indexed.
+import type { SearchData } from "../lib/search";
+import Layout from "../layouts/Layout.astro";
+import Range from "./Range.astro";
+import SearchForm from "./SearchForm.astro";
+
+interface Props { data: SearchData }
+const { ctx, q, range, groupNames, pages, alternates } = Astro.props.data;
+const { text } = ctx;
+---
+<Layout region={ctx.region} title={text.search} alternates={alternates}>
+  <section class="merchHero merchHero--compact">
+    <p class="merchKicker">{text.search}</p>
+    <h1 class="merchDisplay">{text.searchTitle(q)}</h1>
+    <SearchForm ctx={ctx} large query={q} />
+    {pages.length > 0 && (
+      <nav class="search-pages" aria-label={text.pagesFound}>
+        <span>{text.pagesFound}:</span>
+        {pages.map((p) => <a href={p.url}>{p.title}</a>)}
+      </nav>
+    )}
+  </section>
+  <Range range={range} ctx={ctx} groupNames={groupNames} query={q} />
+</Layout>
