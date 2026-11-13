@@ -90,8 +90,8 @@ steps:
   - script: |
       mkdir -p $(Build.ArtifactStagingDirectory)/failure-output
       docker compose --project-name site logs > $(Build.ArtifactStagingDirectory)/failure-output/server.log 2>&1 || true
-    workingDirectory: $(Pipeline.Workspace)/s/merch-astro
       cp -r $(Pipeline.Workspace)/s/merch-react-router/test-results $(Build.ArtifactStagingDirectory)/failure-output/ || true
+    workingDirectory: $(Pipeline.Workspace)/s/merch-astro
     displayName: Collect test output and server log
     condition: failed()
 

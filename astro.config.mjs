@@ -1,6 +1,7 @@
 import node from "@astrojs/node";
 import { defineConfig, envField } from "astro/config";
 import { routePost } from "./scripts/post.mjs";
+import { BRANCH } from "./src/lib/schema.ts";
 
 const secret = (optional = false) => envField.string({ context: "server", access: "secret", optional });
 
@@ -10,7 +11,7 @@ export default defineConfig({
   integrations: [{ name: "post-to-page", hooks: { "astro:server:setup": ({ server }) => server.middlewares.use((req, _res, next) => (routePost(req), next())) } }],
   // `scripts/watch.mjs` builds into a folder of its own and swaps it in under the running server.
   outDir: process.env.BUILD_OUT ?? "./dist",
-  // The pages' own URLs end in no slash and a region's home page in one (`/de/`): `scripts/start.mjs` redirects to that form.
+  // The pages' own URLs end in no slash and a region's home page in one (`/de/`): the `Caddyfile` redirects to that form.
   trailingSlash: "ignore",
   // The stylesheet is one file under a hashed name, as in every demo.
   build: { inlineStylesheets: "never" },
@@ -21,7 +22,7 @@ export default defineConfig({
       NOVA_DELIVERY_USER: secret(),
       NOVA_DELIVERY_PASSWORD: secret(),
       // Not `NOVA_BRANCH`: shells often export that for other work.
-      DEMO_BRANCH: envField.string({ context: "server", access: "secret", default: "merchDemo" }),
+      DEMO_BRANCH: envField.string({ context: "server", access: "secret", default: BRANCH }),
       SHOPIFY_DOMAIN: secret(true),
       SHOPIFY_STOREFRONT_TOKEN: secret(true),
       // The public origin: pre-rendered pages carry it in their canonical and hreflang URLs, so it is needed at build time.

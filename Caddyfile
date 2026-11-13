@@ -78,7 +78,7 @@
 			@page not path_regexp \.\w+$
 			header @page Cache-Control "no-cache"
 			# The build's own report (`scripts/watch.mjs`) is always the latest.
-			header /_build-info.txt Cache-Control "no-cache"
+			header /_build.json Cache-Control "no-cache"
 			# `route`: in the order written (Caddy's own order puts the proxy before the file server).
 			route {
 				# `/de/shop` becomes the file `/de/shop/index.html` here, so the file server never redirects a folder to `/de/shop/`.

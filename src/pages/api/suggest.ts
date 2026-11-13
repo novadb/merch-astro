@@ -15,7 +15,7 @@ type Suggestions = {
   pages: { title: string; url: string }[];
 };
 
-/** POST /api/suggest with the form fields `lang` and `q` → `Suggestions` (JSON) for the typeahead (`SearchBox.svelte`). An unknown `lang` is a 404. */
+/** POST /api/suggest with the form fields `lang` and `q` → `Suggestions` (JSON) for the typeahead of `site.js`. An unknown `lang` is a 404. */
 export const POST: APIRoute = async ({ request }) => {
   const form = await formOf(request);
   if (form instanceof Response) return form;

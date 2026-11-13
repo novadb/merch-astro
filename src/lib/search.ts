@@ -2,7 +2,7 @@
 import { loadProducts } from "./catalog";
 import type { Ctx } from "./content";
 import { MARKET, REGIONS, type Region } from "./i18n";
-import { loadText } from "./page-data";
+import { loadText } from "./labels";
 import { rangeOf, searchFilter, type RangeData, type Sort } from "./products";
 import { PRODUCT_SEARCH_FIELDS } from "./schema";
 import { loadGroups, searchPages } from "./site";

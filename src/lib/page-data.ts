@@ -1,7 +1,7 @@
 /** What a page or product at `/{region}/{path}` shows: read from NovaDB once, rendered by the route that pre-renders it and by the one that answers a posted form. */
 import { documentImages, contentTargets, imageIds, referencedIds, type ContentCtx, type Target } from "./content";
-import { alternatesOf, MARKET, OTHER_LANGUAGE_REGION, t, type Region } from "./i18n";
-import { loadLabels } from "./labels";
+import { alternatesOf, MARKET, OTHER_LANGUAGE_REGION, type Region } from "./i18n";
+import { loadText } from "./labels";
 import { imagesByIds } from "./images";
 import { loadProducts, productByPath, productsByIds } from "./catalog";
 import { rangeOf, type Product, type RangeData } from "./products";
@@ -22,11 +22,6 @@ export type PageData = {
   | { kind: "page"; content?: VNode; ctx: ContentCtx; range?: RangeData; groupNames: Map<number, string> }
   | { kind: "product"; product: Product; groupName?: string; similar: Product[]; ctx: ContentCtx }
 );
-
-/** The region's texts, as every page prints them. */
-export async function loadText(region: Region) {
-  return t(await loadLabels(region), region);
-}
 
 /** The live range of a category page for the posted fields: the products of its groups; undefined for a page without one. */
 async function pageRange(page: Page, region: Region, form: URLSearchParams): Promise<RangeData | undefined> {

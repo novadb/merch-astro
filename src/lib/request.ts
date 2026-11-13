@@ -5,8 +5,6 @@
  */
 import { isRegion, type Region } from "./i18n";
 
-export const notFound = () => new Response(null, { status: 404 });
-
 /** The fields of a posted form (filters, sorting, search); a body that is no form is a 400. */
 export async function formOf(request: Request): Promise<URLSearchParams | Response> {
   const fields = await request.formData().catch(() => undefined);
@@ -18,4 +16,3 @@ export async function formOf(request: Request): Promise<URLSearchParams | Respon
 
 /** The region (`de`, `uk` or `us`) a route's `region` segment or the field `lang` of `POST /api/suggest` holds; anything else, e.g. `en`, is none. */
 export const regionOf = (value: unknown): Region | undefined => (isRegion(value) ? value : undefined);
-

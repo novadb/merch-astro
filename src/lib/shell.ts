@@ -1,7 +1,7 @@
 /** What the header, the footer and the shop need on every page of a region. */
 import { SHOPIFY_DOMAIN, SHOPIFY_STOREFRONT_TOKEN } from "astro:env/server";
 import type { Region } from "./i18n";
-import { loadText } from "./page-data";
+import { loadText } from "./labels";
 import { loadSite } from "./site";
 
 export async function loadShell(region: Region) {

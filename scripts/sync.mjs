@@ -34,6 +34,9 @@ async function copyWhole(source, target, options = {}) {
   await rename(temp, target);
 }
 
+/** The entries of a folder that may not exist yet (nothing is copied there so far); any other error is real. */
+const readMissing = (dir, options) => readdir(dir, options).catch((e) => { if (e.code === "ENOENT") return []; throw e; });
+
 /**
  * Copies the pictures the share has and this pod lacks. A name is a picture's content, so a file there is never
  * copied again. The modification time is kept: Caddy builds its ETag from it, and all pods must give the same one.
@@ -42,14 +45,12 @@ async function copyMedia() {
   const from = path.join(share, "media");
   const to = path.join(site, "media");
   // `.meta` and `.tmp` are the API's own; only the pictures are served
-  for (const entry of await readdir(from, { withFileTypes: true }).catch(() => [])) {
+  for (const entry of await readMissing(from, { withFileTypes: true })) {
     if (entry.name.startsWith(".")) continue;
     const folder = entry.isDirectory() ? entry.name : "";
+    const have = new Set(await readMissing(path.join(to, folder)));
     for (const name of entry.isDirectory() ? await readdir(path.join(from, folder)) : [entry.name]) {
-      const target = path.join(to, folder, name);
-      if (!(await readdir(path.join(to, folder)).catch(() => [])).includes(name)) {
-        await copyWhole(path.join(from, folder, name), target, { preserveTimestamps: true });
-      }
+      if (!have.has(name)) await copyWhole(path.join(from, folder, name), path.join(to, folder, name), { preserveTimestamps: true });
     }
   }
 }

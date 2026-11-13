@@ -1,4 +1,4 @@
-/** `sizes` of a picture per layout, next to its `srcset` (INVENTORY.md, "Media"). No import from the server side: the islands load this file too. */
+/** `sizes` of a picture per layout, next to its `srcset`. */
 
 /** A product card's picture: also the picture the range loads ahead. */
 export const CARD_SIZES = "(min-width: 700px) 320px, 100vw";

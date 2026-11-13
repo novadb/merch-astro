@@ -8,12 +8,14 @@
  * the NATS subject `nova.delivery.update`; that is reachable only inside the instance's cluster, so this polls.
  */
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { BRANCH } from "../src/lib/schema.ts";
 
-const { NOVA_DELIVERY_URL, NOVA_DELIVERY_USER, NOVA_DELIVERY_PASSWORD, DEMO_BRANCH = "merchDemo" } = process.env;
+const { NOVA_DELIVERY_URL, NOVA_DELIVERY_USER, NOVA_DELIVERY_PASSWORD, DEMO_BRANCH = BRANCH } = process.env;
 if (!NOVA_DELIVERY_URL || !NOVA_DELIVERY_USER || !NOVA_DELIVERY_PASSWORD) throw new Error("NOVA_DELIVERY_URL, NOVA_DELIVERY_USER and NOVA_DELIVERY_PASSWORD are not set (see README, \"Run\")");
 
 const POLL_MS = Number(process.env.POLL_SECONDS ?? 30) * 1000;
@@ -58,32 +60,87 @@ async function build(version) {
 }
 
 /** Linked from nowhere, and `robots.txt` asks crawlers to stay out: a page for whoever knows the address. */
-const INFO_FILE = "_build-info.txt";
+const REPORT_FILE = "_build.json";
 
-/** Writes what a build made into a text file that is served with the pages: the files by kind, the pictures the pages show, when, and how long it took. */
-async function writeInfo(client, { version, seconds, names }) {
-  const count = { html: 0, css: 0, js: 0 };
-  const walk = async (dir) => {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-      if (entry.isDirectory()) await walk(path.join(dir, entry.name));
-      else count[{ ".html": "html", ".css": "css", ".js": "js", ".mjs": "js" }[path.extname(entry.name)]]++;
+const KINDS = { ".html": "html", ".css": "css", ".js": "js", ".mjs": "js" };
+
+/** Every file below `dir` by its path (with `/`) and a hash of its content, but for the report, which differs with every build. */
+async function fingerprints(dir) {
+  const files = new Map();
+  const walk = async (folder) => {
+    for (const entry of await readdir(folder, { withFileTypes: true })) {
+      const file = path.join(folder, entry.name);
+      if (entry.isDirectory()) await walk(file);
+      else if (entry.name !== REPORT_FILE) files.set(path.relative(dir, file).split(path.sep).join("/"), createHash("sha256").update(await readFile(file)).digest("hex"));
     }
   };
-  await walk(client);
-  const variants = names.filter((name) => name.includes("/")).length;
-  const lines = [
-    `built         ${new Date().toISOString()}`,
-    `build time    ${seconds.toFixed(1)} s (astro build, from NovaDB's data to the files)`,
-    `change count  ${version} (changeTrackingVersion of branch ${DEMO_BRANCH})`,
-    `code version  ${code}`,
-    "",
-    `html pages    ${count.html}`,
-    `css files     ${count.css}`,
-    `js files      ${count.js}`,
-    `pictures      ${names.length - variants} originals the pages show`,
-    `variants      ${variants} scaled copies (WebP, made once per picture and width after the build)`,
-  ];
-  await writeFile(path.join(client, INFO_FILE), `${lines.join("\n")}\n`);
+  await walk(dir);
+  return files;
+}
+
+/** What `now` has that `before` lacks (added), has changed (updated) and has lost (removed), as sorted lists of keys. */
+function compare(now, before) {
+  const diff = { added: [], updated: [], removed: [] };
+  for (const [key, hash] of now) {
+    if (!before.has(key)) diff.added.push(key);
+    else if (before.get(key) !== hash) diff.updated.push(key);
+  }
+  for (const key of before.keys()) if (!now.has(key)) diff.removed.push(key);
+  for (const list of Object.values(diff)) list.sort();
+  return diff;
+}
+
+/** The pages and files of the build the pointer file names, undefined while there is none (or it was pruned). */
+async function published() {
+  try {
+    const { id } = JSON.parse(await readFile(path.join(share, "current.json"), "utf-8"));
+    const client = path.join(share, "builds", id, "client");
+    return existsSync(client) ? { id, client } : undefined;
+  } catch (error) {
+    if (error.code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+/**
+ * Writes what a build made into a JSON file that is served with the pages, for people and for scripts: when the change
+ * was noticed and the build done, how long it took, and per kind of file (and for the pictures the pages show) how many
+ * there are and how many are new, changed or gone compared with the build before. Pictures are named by their content,
+ * so one is never changed; a new picture is made after the build (`makeMedia`).
+ */
+async function writeReport(client, { version, detected, seconds, names, previous }) {
+  const now = await fingerprints(client);
+  const before = previous ? await fingerprints(previous.client) : new Map();
+  const changes = compare(now, before);
+  const kinds = {};
+  const count = (file, field) => {
+    const kind = (kinds[KINDS[path.extname(file)] ?? "other"] ??= { total: 0, added: 0, updated: 0, removed: 0 });
+    kind[field]++;
+  };
+  for (const file of now.keys()) count(file, "total");
+  for (const [change, files] of Object.entries(changes)) for (const file of files) count(file, change);
+
+  // an original is `{md5}{ext}`, a variant `{width}/{md5}{ext}`
+  const earlier = previous ? await mediaOf(previous.client) : [];
+  const pictures = {};
+  for (const [kind, isKind] of [["originals", (name) => !name.includes("/")], ["variants", (name) => name.includes("/")]]) {
+    const shown = names.filter(isKind);
+    const was = new Set(earlier.filter(isKind));
+    pictures[kind] = { total: shown.length, added: shown.filter((name) => !was.has(name)).length, removed: was.size - shown.filter((name) => was.has(name)).length };
+  }
+  const report = {
+    built: new Date().toISOString(),
+    detected: detected.toISOString(),
+    buildSeconds: Number(seconds.toFixed(1)),
+    branch: DEMO_BRANCH,
+    changeCount: version,
+    previousChangeCount: previous ? Number(previous.id.slice(0, previous.id.lastIndexOf("-"))) : null,
+    codeVersion: code,
+    files: kinds,
+    pictures,
+    changes,
+  };
+  await writeFile(path.join(client, REPORT_FILE), `${JSON.stringify(report, null, 2)}\n`);
 }
 
 /** Writes `file` through a temporary file and a rename: a reader sees the old content or the new, never half. */
@@ -172,16 +229,18 @@ let built;
 for (;;) {
   const seen = await changeVersion();
   if (seen !== undefined && seen !== built) {
+    const detected = new Date();
     if (built !== undefined) {
       console.log(`branch changed (${seen}); waiting ${QUIET_MS / 1000} s for more`);
       await sleep(QUIET_MS);
     }
     const version = (await changeVersion()) ?? seen;
     try {
+      const previous = await published();
       const { id, seconds } = await build(version);
       const client = path.join(site, "builds", id, "client");
       const names = await mediaOf(client);
-      await writeInfo(client, { version, seconds, names });
+      await writeReport(client, { version, detected, seconds, names, previous });
       await publish(id);
       built = version;
       await prune(id);

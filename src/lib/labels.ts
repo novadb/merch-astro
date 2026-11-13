@@ -1,6 +1,6 @@
 /** The UI texts of a region, read from NovaDB (`i18n.ts` turns them into the texts the site prints). */
 import { list } from "./delivery";
-import { ATTRIBUTE_TEXT, CULTURE, type Labels, type Region } from "./i18n";
+import { ATTRIBUTE_TEXT, CULTURE, t, type Labels, type Region } from "./i18n";
 import { COLOR_HEX, LABEL, NAME, TYPE } from "./schema";
 
 /** Labels, attribute names and PIM values of a region's content language (five requests, cached like every Delivery read). */
@@ -19,4 +19,9 @@ export async function loadLabels(region: Region): Promise<Labels> {
     texts,
     values: Object.fromEntries(values.flat().map((o) => [o.meta.id, { name: o.props[NAME], hex: o.props[COLOR_HEX] }])),
   };
+}
+
+/** The region's texts, as every page prints them. */
+export async function loadText(region: Region) {
+  return t(await loadLabels(region), region);
 }

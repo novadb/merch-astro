@@ -52,9 +52,12 @@ under "Deviations": run it from its checkout with `BASE_URL=http://localhost:400
    for 30 s (a build takes about 7 s; a failed one leaves the last good pages). It copies the build to the **shared
    volume** (`builds/{id}`), then writes `current.json` there. Then it asks the API once for every picture the pages
    show; the API writes each to `media/` on the share. A picture's name is its content, so it is made once, ever.
-   The build also leaves a report, `/_build-info.txt`, that Caddy serves with the pages: when it was built, how long
-   `astro build` took, and how many HTML, CSS and JavaScript files and pictures (originals and scaled copies) there are.
-   Nothing links to it and `robots.txt` keeps crawlers out; anyone who knows the address can read it.
+   The build also leaves a report, `/_build.json`, that Caddy serves with the pages, for people and for scripts: when
+   the change was noticed and the build done, how long `astro build` took, per kind of file (HTML, CSS, JavaScript,
+   other) how many there are and how many are added, updated or removed compared with the build before, for the
+   pictures (originals and scaled copies) how many there are, are added or are removed, and the paths of the files that
+   changed. Nothing links to it and `robots.txt` keeps crawlers out; anyone who knows the address can read it. A
+   script that waits for an edit in NovaDB to go live polls `changeCount`.
 5. Each Caddy pod has a **sync** process (`scripts/sync.mjs`): it follows `current.json`, copies the build and the new
    pictures into the pod's own folder and swaps the symlink `current` there. A pod's Caddy starts when that first copy is
    complete, so no pod takes requests without its files, and the shared volume is never in the path of a request.

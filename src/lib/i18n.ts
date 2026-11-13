@@ -3,7 +3,8 @@ import { PRODUCT } from "./schema";
 
 /**
  * A region is the first URL segment (`/de/…`, `/uk/…`, `/us/…`). It fixes the content language, the UI texts, the market
- * and the currency: `de` is German in euros, `uk` English in pounds, `us` English in dollars.
+ * and the currency: `de` is German in euros, `uk` English in pounds, `us` English in dollars. The `Caddyfile` and
+ * `src/pages/index.astro` name the regions too.
  */
 export const REGIONS = ["de", "uk", "us"] as const;
 export type Region = (typeof REGIONS)[number];
