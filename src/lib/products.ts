@@ -104,6 +104,7 @@ function passes(p: Product, s: Selection, skip?: Facet): boolean {
   return (
     any("group", s.group.map(String)) && any("color", s.color) && any("material", s.material) &&
     (skip === "stock" || !s.stock || p.inStock === true) &&
+    // A product without a price in this market cannot be shown to cost at most `max`, so it falls out once a maximum is set.
     (skip === "price" || ((s.min === undefined || (p.price ?? 0) >= s.min) && (s.max === undefined || (p.price ?? Infinity) <= s.max)))
   );
 }

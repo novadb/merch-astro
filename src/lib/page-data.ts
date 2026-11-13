@@ -1,5 +1,5 @@
 /** What a page or product at `/{region}/{path}` shows: read from NovaDB once, rendered by the route that pre-renders it and by the one that answers a posted form. */
-import { documentImages, contentTargets, imageIds, referencedIds, type ContentCtx, type Target } from "./content";
+import { documentImages, contentTargets, imageIds, referencedIds, type ContentCtx, type Ctx, type Target } from "./content";
 import { alternatesOf, MARKET, OTHER_LANGUAGE_REGION, type Region } from "./i18n";
 import { loadText } from "./labels";
 import { imagesByIds } from "./images";
@@ -20,7 +20,7 @@ export type PageData = {
   crumbs: Target[];
 } & (
   | { kind: "page"; content?: VNode; ctx: ContentCtx; range?: RangeData; groupNames: Map<number, string> }
-  | { kind: "product"; product: Product; groupName?: string; similar: Product[]; ctx: ContentCtx }
+  | { kind: "product"; product: Product; groupName?: string; similar: Product[]; ctx: Ctx }
 );
 
 /** The live range of a category page for the posted fields: the products of its groups; undefined for a page without one. */
@@ -80,7 +80,6 @@ async function productData(site: Site, groups: Map<number, string>, product: Pro
     productsByIds([product.id], OTHER_LANGUAGE_REGION[region], market),
     loadText(region),
   ]);
-  const base = { region, market, text };
   const category = product.groupId ? categoryPage(site, product.groupId) : undefined;
   return {
     kind: "product", region,
@@ -90,7 +89,7 @@ async function productData(site: Site, groups: Map<number, string>, product: Pro
     product,
     groupName: product.groupId ? groups.get(product.groupId) : undefined,
     similar,
-    ctx: { ...base, products: {}, targets: {}, images: {} },
+    ctx: { region, market, text },
     crumbs: [...breadcrumb(site, category).map(toCrumb), { url: product.url, title: product.name }],
   };
 }

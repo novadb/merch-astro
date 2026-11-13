@@ -30,7 +30,7 @@ const { text, home, nav, shop } = await loadShell(region);
     {shop && <meta name="shopify-domain" content={shop.domain} />}
     {shop && <meta name="shopify-token" content={shop.token} />}
   </head>
-  <!-- `data-shop`: a shop is configured; without it site.css hides the place of the buy button. `data-text`: what site.js prints itself. -->
+  {/* `data-shop`: a shop is configured; without it site.css hides the place of the buy button. `data-text`: what site.js prints itself. */}
   <body
     data-lang={region}
     data-shop={shop ? "" : undefined}
@@ -67,7 +67,7 @@ const { text, home, nav, shop } = await loadShell(region);
       <p set:html={text.poweredBy.html} />
       <a class="site-footer__repo" href={`https://github.com/novadb/${REPO}`}>{REPO}</a>
     </footer>
-    <!-- The NovaDB logo in the corner: decoration only, the footer's line names NovaDB in words. -->
+    {/* The NovaDB logo in the corner: decoration only, the footer's line names NovaDB in words. */}
     <aside class="source" aria-hidden="true"></aside>
     <script>
       import "../scripts/site.js";

@@ -51,7 +51,10 @@ const { handler: ssr } = await import(pathToFileURL(path.join(build, "server", "
 function notFound(res) {
   res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
   createReadStream(path.join(build, "client", "404.html"))
-    .on("error", (error) => res.end(console.error("404 page:", error.message)))
+    .on("error", (error) => {
+      console.error("404 page:", error.message);
+      res.end();
+    })
     .pipe(res);
 }
 

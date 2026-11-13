@@ -1,13 +1,13 @@
 ---
 // The product page: PIM data (price per market, stock, specs) plus similar products.
-import type { ContentCtx } from "../lib/content";
+import type { Ctx } from "../lib/content";
 import { formatPrice } from "../lib/i18n";
 import { srcSet } from "../lib/images";
 import type { Product } from "../lib/products";
 import { PRODUCT_SIZES } from "../lib/sizes";
 import ProductCard from "./ProductCard.astro";
 
-interface Props { ctx: ContentCtx; product: Product; groupName?: string; similar: Product[] }
+interface Props { ctx: Ctx; product: Product; groupName?: string; similar: Product[] }
 const { ctx, product: p, groupName, similar } = Astro.props;
 const { text, region } = ctx;
 const specs: [string, string][] = [

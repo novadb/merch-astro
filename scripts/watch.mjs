@@ -43,6 +43,8 @@ async function changeVersion() {
     headers: { Authorization: authorization, Accept: "application/json", ...(etag && { "If-None-Match": etag }) },
   }).catch((error) => console.warn("updateInfo unreachable:", error.cause?.code ?? error.message));
   if (!res || res.status === 304) return undefined;
+  // A wrong login (401, 403) or branch (404) does not heal by waiting, unlike an unreachable API or a server error.
+  if ([401, 403, 404].includes(res.status)) throw new Error(`updateInfo answered ${res.status}: check NOVA_DELIVERY_* and DEMO_BRANCH`);
   if (!res.ok) return void console.warn(`updateInfo answered ${res.status}`);
   etag = res.headers.get("ETag") ?? undefined;
   return (await res.json()).changeTrackingVersion;
@@ -68,14 +70,11 @@ const KINDS = { ".html": "html", ".css": "css", ".js": "js", ".mjs": "js" };
 /** Every file below `dir` by its path (with `/`) and a hash of its content, but for the report, which differs with every build. */
 async function fingerprints(dir) {
   const files = new Map();
-  const walk = async (folder) => {
-    for (const entry of await readdir(folder, { withFileTypes: true })) {
-      const file = path.join(folder, entry.name);
-      if (entry.isDirectory()) await walk(file);
-      else if (entry.name !== REPORT_FILE) files.set(path.relative(dir, file).split(path.sep).join("/"), createHash("sha256").update(await readFile(file)).digest("hex"));
-    }
-  };
-  await walk(dir);
+  for (const entry of await readdir(dir, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile() || entry.name === REPORT_FILE) continue;
+    const file = path.join(entry.parentPath, entry.name);
+    files.set(path.relative(dir, file).split(path.sep).join("/"), createHash("sha256").update(await readFile(file)).digest("hex"));
+  }
   return files;
 }
 
@@ -194,14 +193,9 @@ async function prune(current) {
 async function mediaOf(client) {
   const names = new Set();
   const found = /\/media\/([0-9a-f-]{32,36}\/(?:original|\d+)\.[a-z0-9]{1,5}(?:\.webp)?)/g;
-  const walk = async (dir) => {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-      const file = path.join(dir, entry.name);
-      if (entry.isDirectory()) await walk(file);
-      else if (entry.name.endsWith(".html")) for (const [, name] of (await readFile(file, "utf-8")).matchAll(found)) names.add(name);
-    }
-  };
-  await walk(client);
+  for (const name of await readdir(client, { recursive: true })) {
+    if (name.endsWith(".html")) for (const [, media] of (await readFile(path.join(client, name), "utf-8")).matchAll(found)) names.add(media);
+  }
   return [...names];
 }
 

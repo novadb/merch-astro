@@ -26,12 +26,10 @@ export default defineConfig({
       SHOPIFY_DOMAIN: secret(true),
       SHOPIFY_STOREFRONT_TOKEN: secret(true),
       // The public origin: pre-rendered pages carry it in their canonical and hreflang URLs, so it is needed at build time.
-      SITE_URL: secret(),
-      MEDIA_CACHE_DIR: secret(true),
+      SITE_URL: envField.string({ context: "server", access: "secret", url: true }),
     },
   },
   // The site has no state-changing request, only searches and filters posted as forms, and behind the ingress the Origin
   // (https) never equals the request's own URL (http): the origin check would refuse every one of them.
   security: { checkOrigin: false },
-  telemetry: false,
 });
