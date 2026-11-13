@@ -42,7 +42,7 @@ steps:
     env:
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
-  # The three containers of compose.yaml (Caddy, the API, the builder), built from the Dockerfile as in production.
+  # The three containers of compose.yaml (Caddy, the app, the builder), built from the Dockerfile as in production.
   - script: docker compose --project-name site up --detach --build
     displayName: Build and start the site
     workingDirectory: $(Pipeline.Workspace)/s/merch-astro

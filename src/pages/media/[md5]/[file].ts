@@ -1,8 +1,15 @@
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type { APIRoute } from "astro";
+import { MEDIA_CACHE_DIR } from "astro:env/server";
+import { deliveryFetch, instanceUrl } from "../../../lib/delivery";
 import { MEDIA_WIDTHS } from "../../../lib/images";
-import { FILE_NAME, serveOriginal, serveScaled } from "../../../lib/media";
+import { FILE_NAME, mediaStore } from "../../../lib/media";
 
 export const prerender = false;
+
+/** Only `npm run dev` asks this route: in production the builder makes the pictures (`scripts/watch.mjs`) and Caddy serves them. The default folder is writable for the container's `node` user. */
+const { serveOriginal, serveScaled } = mediaStore(MEDIA_CACHE_DIR ?? path.join(tmpdir(), "nova-media"), (p) => deliveryFetch(instanceUrl(p)));
 
 const notFound = () => new Response("Not found", { status: 404 });
 

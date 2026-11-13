@@ -1,8 +1,8 @@
 # The web server in front, the official Caddy image: every request reaches it. The built pages, `/_astro/*`, the pictures
 # and the 404 page are files in its own folder (`SITE_DIR`, kept equal to the shared folder by `scripts/sync.mjs`),
-# without any logic of ours. Caddy answers each of them from that folder or with a 404 and never asks the API for one:
-# the API would only answer what Caddy already knows, at the cost of a hop for every miss. Only what needs a request
-# goes to the API (`scripts/start.mjs`, at `API_ADDRESS`): a POST (a posted form is answered at the page's own URL) and
+# without any logic of ours. Caddy answers each of them from that folder or with a 404 and never asks the app for one:
+# the app would only answer what Caddy already knows, at the cost of a hop for every miss. Only what needs a request
+# goes to the app (`scripts/start.mjs`, at `APP_ADDRESS`): a POST (a posted form is answered at the page's own URL) and
 # `/api/*`. No GET reaches it.
 #
 # `SITE_ADDRESS` is the address the site answers on. Behind a proxy that ends TLS: `http://<host>:<port>`, which keeps
@@ -18,9 +18,9 @@
 	import /etc/caddy/tls/*
 }
 
-# The API: a pod that is just starting or stopping is tried again for a moment, on the next one.
-(api) {
-	reverse_proxy {$API_ADDRESS:127.0.0.1:3001} {
+# The app: a pod that is just starting or stopping is tried again for a moment, on the next one.
+(app) {
+	reverse_proxy {$APP_ADDRESS:127.0.0.1:3001} {
 		lb_try_duration 3s
 		lb_try_interval 250ms
 	}
@@ -41,10 +41,10 @@
 
 	# Never a file.
 	handle /api/* {
-		import api
+		import app
 	}
 
-	# Only a GET or HEAD can be a file: a posted form is answered by the API, at the same URL.
+	# Only a GET or HEAD can be a file: a posted form is answered by the app, at the same URL.
 	@read method GET HEAD
 	handle @read {
 		root * {$SITE_DIR:/site}
@@ -62,7 +62,7 @@
 		}
 
 		# A picture's name is its content, so it never changes: the file is served for good. A picture that is not in
-		# the folder yet (the builder makes it, the sync copies it) is a 404, never a request to the API.
+		# the folder yet (the builder makes it before the page that shows it is live, the sync copies it) is a 404, never a request to the app.
 		handle /media/* {
 			@stored file
 			handle @stored {
@@ -114,7 +114,7 @@
 	}
 
 	handle {
-		import api
+		import app
 	}
 
 	# What is no file is the built 404 page, one for the whole site, with the status 404.

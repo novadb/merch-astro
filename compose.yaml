@@ -1,6 +1,6 @@
 # The site as it runs in production, with the same parts: `builder` builds the pages and the pictures into the volume
-# `share`; `web-sync` copies them into the volume `web-site`, which only `web` (Caddy) reads and serves; `api` answers what
-# needs a request. Each one scales alone (`--scale api=2`, `--scale web=2` needs another published port). The Delivery
+# `share`; `web-sync` copies them into the volume `web-site`, which only `web` (Caddy) reads and serves; `app` answers what
+# needs a request. Each one scales alone (`--scale app=2`, `--scale web=2` needs another published port). The Delivery
 # login, SITE_URL and the Shopify settings come from the environment or `.env` (`.env.example`).
 x-image: &image
   image: localhost/merch-astro
@@ -11,9 +11,8 @@ services:
     build: .
     command: [node, scripts/watch.mjs]
     environment:
-      # An api runs only a build made by the same code; every container of this file has the same image.
+      # An app runs only a build made by the same code; every container of this file has the same image.
       - CODE_VERSION=local
-      - API_URL=http://api:3001
       - NOVA_DELIVERY_URL
       - NOVA_DELIVERY_USER
       - NOVA_DELIVERY_PASSWORD
@@ -22,14 +21,13 @@ services:
       - SHOPIFY_STOREFRONT_TOKEN
       - SITE_URL
     volumes: [share:/app/share]
-  api:
+  app:
     <<: *image
     command: [node, scripts/start.mjs]
     environment:
       - CODE_VERSION=local
       # `web` is another host here, not localhost as in a pod
-      - API_HOST=0.0.0.0
-      - MEDIA_CACHE_DIR=/app/share/media
+      - APP_HOST=0.0.0.0
       - NOVA_DELIVERY_URL
       - NOVA_DELIVERY_USER
       - NOVA_DELIVERY_PASSWORD
@@ -54,7 +52,7 @@ services:
   web:
     image: docker.io/library/caddy:2.11-alpine
     environment:
-      - API_ADDRESS=api:3001
+      - APP_ADDRESS=app:3001
       - SITE_ADDRESS
       - CADDY_STORAGE=/data
     ports: ["4002:3000"]

@@ -44,7 +44,7 @@ const readMissing = (dir, options) => readdir(dir, options).catch((e) => { if (e
 async function copyMedia() {
   const from = path.join(share, "media");
   const to = path.join(site, "media");
-  // `.meta` and `.tmp` are the API's own; only the pictures are served. A picture's folder (`{md5}`) holds its original and variants, one level deep.
+  // `.meta` and `.tmp` are the media store's own (`src/lib/media.ts`); only the pictures are served. A picture's folder (`{md5}`) holds its original and variants, one level deep.
   for (const entry of await readMissing(from, { withFileTypes: true })) {
     if (entry.name.startsWith(".")) continue;
     const folder = entry.isDirectory() ? entry.name : "";

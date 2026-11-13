@@ -1,9 +1,9 @@
 /**
- * Builds the pre-rendered pages from NovaDB and builds them again whenever the branch changes, then publishes the build
- * in the shared folder (`SHARE_DIR`): `builds/{id}` and, last, the pointer file `current`, which `scripts/sync.mjs`
- * (Caddy's copy) and `scripts/start.mjs` (the API) follow. Then it has every picture the pages show made once
- * (`media/`, see `src/lib/media.ts`). The Delivery API reports a change as the counter `changeTrackingVersion` of
- * `GET branches/{branch}/updateInfo` (a 304 for as long as it stands still). The counter moves with every transaction of
+ * Builds the pre-rendered pages from NovaDB and builds them again whenever the branch changes. It makes every picture the
+ * pages show (`media/` in the shared folder `SHARE_DIR`, see `src/lib/media.ts`) and then publishes the build there:
+ * `builds/{id}` and, last, the pointer file current.json, which `scripts/sync.mjs` (Caddy's copy) and
+ * `scripts/start.mjs` (the app) follow. So a page is live only when its pictures are on the share. The Delivery API
+ * reports a change as the counter `changeTrackingVersion` of `GET branches/{branch}/updateInfo` (a 304 for as long as it stands still). The counter moves with every transaction of
  * any branch of the instance, so this may build without need and never misses a change. NovaDB can push the same news as
  * the NATS subject `nova.delivery.update`; that is reachable only inside the instance's cluster, so this polls.
  */
@@ -13,6 +13,7 @@ import { existsSync } from "node:fs";
 import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { mediaStore } from "../src/lib/media.ts";
 import { BRANCH } from "../src/lib/schema.ts";
 
 const { NOVA_DELIVERY_URL, NOVA_DELIVERY_USER, NOVA_DELIVERY_PASSWORD, DEMO_BRANCH = BRANCH } = process.env;
@@ -25,15 +26,15 @@ const QUIET_MS = Number(process.env.QUIET_SECONDS ?? 30) * 1000;
 /** Where the build runs: inside the project, because the built server code finds its packages from there. */
 const site = path.resolve(process.env.SITE_DIR ?? "site");
 const share = path.resolve(process.env.SHARE_DIR ?? "share");
-/** Names the code of this image: an API only runs the server code of a build made by the same code (`start.mjs`). */
+/** Names the code of this image: an app only runs the server code of a build made by the same code (`start.mjs`). */
 const code = process.env.CODE_VERSION ?? "dev";
-/** The API, which makes the pictures. */
-const apiUrl = process.env.API_URL ?? "http://127.0.0.1:3001";
 /** Builds kept on the share besides the current one, and how long a build stays that a copy may be reading. */
 const KEEP_BUILDS = 3;
 const KEEP_MS = 10 * 60 * 1000;
 const authorization = "Basic " + Buffer.from(`${NOVA_DELIVERY_USER}:${NOVA_DELIVERY_PASSWORD}`).toString("base64");
 const astro = path.resolve("node_modules/astro/bin/astro.mjs");
+/** The pictures, made here with the code of this image: a running app of another version cannot make them differently or not at all. */
+const store = mediaStore(path.join(share, "media"), (file) => fetch(new URL(file, NOVA_DELIVERY_URL), { headers: { Authorization: authorization } }));
 
 let etag;
 /** `changeTrackingVersion` of the branch; undefined while it is unchanged since the last call or the API cannot be reached (logged). */
@@ -106,7 +107,7 @@ async function published() {
  * Writes what a build made into a JSON file that is served with the pages, for people and for scripts: when the change
  * was noticed and the build done, how long it took, and per kind of file (and for the pictures the pages show) how many
  * there are and how many are new, changed or gone compared with the build before. Pictures are named by their content,
- * so one is never changed; a new picture is made after the build (`makeMedia`).
+ * so one is never changed; a new picture is made before the build is published (`makeMedia`).
  */
 async function writeReport(client, { version, detected, seconds, names, previous }) {
   const now = await fingerprints(client);
@@ -157,7 +158,11 @@ async function copyTree(from, to) {
   ));
 }
 
-/** Copies the build to the share, then points the pointer file at it: whoever reads the pointer finds all of the build. */
+/**
+ * Copies the build to the share, then points the pointer file at it: whoever reads the pointer finds all of the build, and
+ * its pictures, which are made before. The pointer is compact JSON on purpose: a startup probe can `grep` it for
+ * `"code":"<version>"` to know that a complete build of this code is published.
+ */
 async function publish(id) {
   const target = path.join(share, "builds", id);
   await rm(`${target}.partial`, { recursive: true, force: true });
@@ -195,29 +200,28 @@ async function mediaOf(client) {
   return [...names];
 }
 
+/** `{md5}/original{ext}` or `{md5}/{width}{ext}.webp`, taken apart. */
+const PICTURE = /^([^/]+)\/(?:original(\.[a-z0-9]+)|(\d+)(\.[a-z0-9]+)\.webp)$/;
+
 /**
- * Has the API make each picture of the pages that the shared folder lacks, four at a time: a picture's name is its
- * content, so each is made once, here, and ever after only found. Until the API is up (a new pod starts after the first build) it asks again.
+ * Makes each picture of the pages that the shared folder lacks, four at a time: a picture's name is its content, so each
+ * is made once, here, and ever after only found. A picture NovaDB does not have is counted and the build goes on; any
+ * other error (network, disk) is thrown, so the build is not published and the next poll builds again.
  */
 async function makeMedia(names) {
   const todo = names.filter((name) => !existsSync(path.join(share, "media", name)) || !existsSync(path.join(share, "media", ".meta", `${name}.json`)));
   let made = 0;
   let missing = 0;
-  const deadline = Date.now() + 10 * 60 * 1000;
   const queue = [...todo];
   await Promise.all(Array.from({ length: 4 }, async () => {
     for (let name = queue.shift(); name; name = queue.shift()) {
-      for (;;) {
-        const res = await fetch(`${apiUrl}/media/${name}`).catch(() => undefined);
-        await res?.body?.cancel();
-        if (res?.ok) made++;
-        else if (res?.status === 404) missing++;
-        else if (Date.now() < deadline) { await sleep(5000); continue; }
-        break;
-      }
+      const [, md5, originalExt, width, ext] = name.match(PICTURE);
+      const meta = originalExt ? await store.original(md5, originalExt) : await store.scaled(md5, ext, Number(width));
+      if (meta) made++;
+      else missing++;
     }
   }));
-  console.log(`pictures: ${made} made, ${missing} not in NovaDB, ${todo.length - made - missing} failed, ${names.length - todo.length} there already`);
+  console.log(`pictures: ${made} made, ${missing} not in NovaDB, ${names.length - todo.length} there already`);
 }
 
 // As the container's first process Node has no default handler for the platform's stop signal.
@@ -240,16 +244,19 @@ for (;;) {
       const { id, seconds } = await build(version);
       const client = path.join(site, "builds", id, "client");
       const names = await mediaOf(client);
+      await makeMedia(names);
       await writeReport(client, { version, detected, seconds, names, previous });
       await publish(id);
       built = version;
       await prune(id);
       console.log(`built version ${version}`);
-      await makeMedia(names);
     } catch (error) {
-      // The pages of the last good build stay; the next poll tries again.
+      // The pages of the last good build stay (also when a picture could not be made); the next poll tries again.
       console.error("build failed:", error.message);
       etag = undefined;
+      // Only a build that is not published is left in here (`publish` removes its own): one more with every failed round.
+      await rm(path.join(site, "builds"), { recursive: true, force: true });
+      await mkdir(path.join(site, "builds"), { recursive: true });
     }
   }
   await sleep(POLL_MS);
