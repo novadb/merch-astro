@@ -9,7 +9,7 @@
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -92,11 +92,19 @@ async function writeAtomic(file, content) {
   await rename(`${file}.tmp`, file);
 }
 
+/** Copies a folder file by file. Not `fs.cp`: it sets the mode of every copy, which the SMB share of a cluster refuses (EPERM); `copyFile` tolerates that. */
+async function copyTree(from, to) {
+  await mkdir(to, { recursive: true });
+  await Promise.all((await readdir(from, { withFileTypes: true })).map((entry) =>
+    entry.isDirectory() ? copyTree(path.join(from, entry.name), path.join(to, entry.name)) : copyFile(path.join(from, entry.name), path.join(to, entry.name)),
+  ));
+}
+
 /** Copies the build to the share, then points the pointer file at it: whoever reads the pointer finds all of the build. */
 async function publish(id) {
   const target = path.join(share, "builds", id);
   await rm(`${target}.partial`, { recursive: true, force: true });
-  await cp(path.join(site, "builds", id), `${target}.partial`, { recursive: true });
+  await copyTree(path.join(site, "builds", id), `${target}.partial`);
   await rename(`${target}.partial`, target);
   await writeAtomic(path.join(share, "current.json"), JSON.stringify({ id, code }));
   await rm(path.join(site, "builds", id), { recursive: true, force: true });
@@ -105,12 +113,13 @@ async function publish(id) {
 /** The time in an id (`{version}-{time}`). */
 const builtAt = (id) => Number(id.slice(id.lastIndexOf("-") + 1));
 
-/** Removes builds from the share, but the newest few and everything a copy may still be reading. */
+/** Removes builds from the share, but the newest few and everything a copy may still be reading; also the leftovers of copies that failed halfway. */
 async function prune(current) {
   const builds = path.join(share, "builds");
-  const ids = (await readdir(builds)).filter((name) => !name.endsWith(".partial")).sort((a, b) => builtAt(b) - builtAt(a));
-  for (const id of ids.slice(KEEP_BUILDS)) {
-    if (id !== current && Date.now() - builtAt(id) > KEEP_MS) await rm(path.join(builds, id), { recursive: true, force: true });
+  const names = await readdir(builds);
+  const ids = names.filter((name) => !name.endsWith(".partial")).sort((a, b) => builtAt(b) - builtAt(a));
+  for (const name of [...ids.slice(KEEP_BUILDS), ...names.filter((name) => name.endsWith(".partial"))]) {
+    if (name !== current && Date.now() - builtAt(name.replace(/\.partial$/, "")) > KEEP_MS) await rm(path.join(builds, name), { recursive: true, force: true });
   }
 }
 
