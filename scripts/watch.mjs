@@ -104,12 +104,14 @@ async function published() {
 }
 
 /**
- * Writes what a build made into a JSON file that is served with the pages, for people and for scripts: when the change
- * was noticed and the build done, how long it took, and per kind of file (and for the pictures the pages show) how many
- * there are and how many are new, changed or gone compared with the build before. Pictures are named by their content,
- * so one is never changed; a new picture is made before the build is published (`makeMedia`).
+ * Writes what a build made into a JSON file that is served with the pages, for people and for scripts. It is the build's
+ * last file, written after its pictures: the build's id (the `id` of current.json once it is published, so a script
+ * compares what a pod serves with what the share points to), when the change was noticed and the build done, how long
+ * the pages and the pictures took, and per kind of file (and for the pictures the pages show) how many there are and
+ * how many are new, changed or gone compared with the build before. Pictures are named by their content, so one is
+ * never changed.
  */
-async function writeReport(client, { version, detected, seconds, names, previous }) {
+async function writeReport(client, { id, version, detected, seconds, pictures: made, names, previous }) {
   const now = await fingerprints(client);
   const before = previous ? await fingerprints(previous.client) : new Map();
   const changes = compare(now, before);
@@ -130,15 +132,18 @@ async function writeReport(client, { version, detected, seconds, names, previous
     pictures[kind] = { total: shown.length, added: shown.filter((name) => !was.has(name)).length, removed: was.size - shown.filter((name) => was.has(name)).length };
   }
   const report = {
+    id,
     built: new Date().toISOString(),
     detected: detected.toISOString(),
     buildSeconds: Number(seconds.toFixed(1)),
+    pictureSeconds: Number(made.seconds.toFixed(1)),
     branch: DEMO_BRANCH,
     changeCount: version,
     previousChangeCount: previous ? Number(previous.id.slice(0, previous.id.lastIndexOf("-"))) : null,
     codeVersion: code,
     files: kinds,
-    pictures,
+    // made: new on the share with this build; missing: shown by a page, but not in NovaDB
+    pictures: { ...pictures, made: made.made, missing: made.missing },
     changes,
   };
   await writeFile(path.join(client, REPORT_FILE), `${JSON.stringify(report, null, 2)}\n`);
@@ -206,9 +211,11 @@ const PICTURE = /^([^/]+)\/(?:original(\.[a-z0-9]+)|(\d+)(\.[a-z0-9]+)\.webp)$/;
 /**
  * Makes each picture of the pages that the shared folder lacks, four at a time: a picture's name is its content, so each
  * is made once, here, and ever after only found. A picture NovaDB does not have is counted and the build goes on; any
- * other error (network, disk) is thrown, so the build is not published and the next poll builds again.
+ * other error (network, disk) is thrown, so the build is not published and the next poll builds again. Returns how many
+ * were made and missing, and how long it took.
  */
 async function makeMedia(names) {
+  const started = Date.now();
   const todo = names.filter((name) => !existsSync(path.join(share, "media", name)) || !existsSync(path.join(share, "media", ".meta", `${name}.json`)));
   let made = 0;
   let missing = 0;
@@ -222,6 +229,7 @@ async function makeMedia(names) {
     }
   }));
   console.log(`pictures: ${made} made, ${missing} not in NovaDB, ${names.length - todo.length} there already`);
+  return { made, missing, seconds: (Date.now() - started) / 1000 };
 }
 
 // As the container's first process Node has no default handler for the platform's stop signal.
@@ -244,8 +252,8 @@ for (;;) {
       const { id, seconds } = await build(version);
       const client = path.join(site, "builds", id, "client");
       const names = await mediaOf(client);
-      await makeMedia(names);
-      await writeReport(client, { version, detected, seconds, names, previous });
+      const pictures = await makeMedia(names);
+      await writeReport(client, { id, version, detected, seconds, pictures, names, previous });
       await publish(id);
       built = version;
       await prune(id);
