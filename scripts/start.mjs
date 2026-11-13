@@ -1,5 +1,5 @@
 /**
- * The API: the on-demand routes (a posted form, `/api/suggest`, `/media`, `/`), behind Caddy, which serves the built
+ * The API: the on-demand routes (a posted form, `/api/suggest`, and `/media`, which only the builder asks), behind Caddy, which serves the built
  * pages itself (`Caddyfile`). A server of our own around the adapter's handler, because a POST to a page must reach
  * the route under `/post` (`post.mjs`) and the code comes from the builder's output, not from this image.
  */

@@ -10,7 +10,7 @@ export type Target = { url: string; title: string; image?: string };
 export type Ctx = { region: Region; market: Market; text: Texts };
 /**
  * `products`: the products the document embeds as cards, `targets` the pages it links to or teases, and `images` the
- * picture URL (`/media/{md5}{ext}`) of each image object it embeds, all by object ID.
+ * picture URL (`/media/{md5}/original{ext}`) of each image object it embeds, all by object ID.
  */
 export type ContentCtx = Ctx & { products: Record<number, Product>; targets: Record<number, Target>; images: Record<number, string> };
 

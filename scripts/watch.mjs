@@ -120,10 +120,10 @@ async function writeReport(client, { version, detected, seconds, names, previous
   for (const file of now.keys()) count(file, "total");
   for (const [change, files] of Object.entries(changes)) for (const file of files) count(file, change);
 
-  // an original is `{md5}{ext}`, a variant `{width}/{md5}{ext}`
+  // an original is `{md5}/original{ext}`, a variant `{md5}/{width}{ext}.webp`
   const earlier = previous ? await mediaOf(previous.client) : [];
   const pictures = {};
-  for (const [kind, isKind] of [["originals", (name) => !name.includes("/")], ["variants", (name) => name.includes("/")]]) {
+  for (const [kind, isKind] of [["originals", (name) => name.includes("/original.")], ["variants", (name) => !name.includes("/original.")]]) {
     const shown = names.filter(isKind);
     const was = new Set(earlier.filter(isKind));
     pictures[kind] = { total: shown.length, added: shown.filter((name) => !was.has(name)).length, removed: was.size - shown.filter((name) => was.has(name)).length };
@@ -183,7 +183,7 @@ async function prune(current) {
 /** Every `/media/...` URL the pages in `client` mention (`src`, `srcset`, the texts of the page), without the `/media/`. */
 async function mediaOf(client) {
   const names = new Set();
-  const found = /\/media\/((?:\d+\/)?[0-9a-f-]{32,36}\.[a-z0-9]{1,5})/g;
+  const found = /\/media\/([0-9a-f-]{32,36}\/(?:original|\d+)\.[a-z0-9]{1,5}(?:\.webp)?)/g;
   const walk = async (dir) => {
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       const file = path.join(dir, entry.name);

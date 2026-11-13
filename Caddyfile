@@ -1,7 +1,9 @@
-# The web server in front, the official Caddy image: every request reaches it. The built pages and the pictures are
-# files in its own folder (`SITE_DIR`, kept equal to the shared folder by `scripts/sync.mjs`), without any logic of ours.
-# What needs a request (a posted form, `/api/*`, a picture not made yet) is passed on to the API (`scripts/start.mjs`)
-# at `API_ADDRESS`.
+# The web server in front, the official Caddy image: every request reaches it. The built pages, `/_astro/*`, the pictures
+# and the 404 page are files in its own folder (`SITE_DIR`, kept equal to the shared folder by `scripts/sync.mjs`),
+# without any logic of ours. Caddy answers each of them from that folder or with a 404 and never asks the API for one:
+# the API would only answer what Caddy already knows, at the cost of a hop for every miss. Only what needs a request
+# goes to the API (`scripts/start.mjs`, at `API_ADDRESS`): a POST (a posted form is answered at the page's own URL) and
+# `/api/*`. No GET reaches it.
 #
 # `SITE_ADDRESS` is the address the site answers on. Behind a proxy that ends TLS: `http://<host>:<port>`, which keeps
 # Caddy from asking for a certificate. Where Caddy ends TLS itself: the bare host name (`astro.example.com`), and it gets
@@ -47,21 +49,47 @@
 	handle @read {
 		root * {$SITE_DIR:/site}
 
-		# A picture's name is its content, so it never changes: the file is served for good. A picture not made yet
-		# (the builder makes every one the pages show) and a name that is none go to the API, which answers 404.
+		# `/` has no file: it leads to the visitor's region. Only the first language tag counts: `de` gets German,
+		# British English and its neighbours the `uk` region, anything else, or no header, `us`.
+		@de header_regexp Accept-Language (?i)^\s*de
+		@uk header_regexp Accept-Language (?i)^\s*en-(gb|ie|au|nz|za|in|sg)\b
+		handle / {
+			# The answer depends on this header, so a cache must keep one per value.
+			header Vary Accept-Language
+			redir @de /de/ 302
+			redir @uk /uk/ 302
+			redir * /us/ 302
+		}
+
+		# A picture's name is its content, so it never changes: the file is served for good. A picture that is not in
+		# the folder yet (the builder makes it, the sync copies it) is a 404, never a request to the API.
 		handle /media/* {
-			@stored file {
-				try_files {path}
-			}
+			@stored file
 			handle @stored {
-				# The name keeps the original's extension, the scaled file is WebP.
-				@scaled path_regexp ^/media/\d+/
-				header @scaled Content-Type image/webp
 				header Cache-Control "public, max-age=31536000, immutable"
 				file_server
 			}
+
+			# A scaled variant (`{md5}/{width}{ext}.webp`; SVG has none) that is missing is answered with the original
+			# when that is there. It is another picture than the one named, so the browser asks again after 15 minutes.
+			@variant {
+				path_regexp v ^/media/([^/]+)/(?:400|800|1200|1600)(\.[a-z0-9]+)\.webp$
+				not path *.svg.webp
+			}
+			handle @variant {
+				@original file /media/{re.v.1}/original{re.v.2}
+				handle @original {
+					rewrite * /media/{re.v.1}/original{re.v.2}
+					header Cache-Control "private, max-age=900"
+					file_server
+				}
+				handle {
+					respond "Not found" 404
+				}
+			}
+
 			handle {
-				import api
+				respond "Not found" 404
 			}
 		}
 
@@ -79,17 +107,25 @@
 			header @page Cache-Control "no-cache"
 			# The build's own report (`scripts/watch.mjs`) is always the latest.
 			header /_build.json Cache-Control "no-cache"
-			# `route`: in the order written (Caddy's own order puts the proxy before the file server).
-			route {
-				# `/de/shop` becomes the file `/de/shop/index.html` here, so the file server never redirects a folder to `/de/shop/`.
-				try_files {path} {path}/index.html
-				# `pass_thru`: what is no file goes to the API.
-				file_server {
-					pass_thru
-				}
-				import api
-			}
+			# `/de/shop` becomes the file `/de/shop/index.html` here, so the file server never redirects a folder to `/de/shop/`.
+			try_files {path} {path}/index.html
+			file_server
 		}
 	}
-	import api
+
+	handle {
+		import api
+	}
+
+	# What is no file is the built 404 page, one for the whole site, with the status 404.
+	handle_errors {
+		@missing expression {err.status_code} == 404
+		handle @missing {
+			root * {$SITE_DIR:/site}/current
+			# Headers set before the error stay: a missing `/_astro` file would otherwise be cached as `immutable`.
+			header Cache-Control "no-cache"
+			rewrite * /404.html
+			file_server
+		}
+	}
 }

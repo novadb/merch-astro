@@ -3,8 +3,9 @@
  * picture is fetched from NovaDB only once. The upstream route is content-addressed and cannot change under its
  * name (`files/{md5}{extension}`: ETag = MD5), so a cached file is never revalidated.
  *
- * The cache folder is laid out like the URLs below `/media`: `{md5}{ext}` and `{width}/{md5}{ext}`. A web server can
- * serve that folder as it is (`Caddyfile`); what the server reads about a file (type, ETag) is in `.meta`.
+ * A file's cache key is its URL below `/media`: `{md5}/original{ext}` and, scaled, `{md5}/{width}{ext}.webp`. Caddy serves
+ * the folder as it is (`Caddyfile`) and never asks this code for a picture: only the builder does, once per file
+ * (`scripts/watch.mjs`). What the server reads about a file (type, ETag) is in `.meta`.
  */
 import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
@@ -85,12 +86,13 @@ async function ensure(key: string, build: () => Promise<Meta | undefined>): Prom
   return pending;
 }
 
-/** Scales the cached original `{name}` to `width` as WebP, without enlarging. Meta is written last, as in `download`. */
-async function scale(name: string, width: number, key: string): Promise<Meta | undefined> {
-  const original = await ensure(name, () => download(name, `files/${name}`));
+/** Scales the cached original (`{md5}/original{ext}`, fetched first if missing) to `width` as WebP, without enlarging. Meta is written last, as in `download`. */
+async function scale(md5: string, ext: string, width: number, key: string): Promise<Meta | undefined> {
+  const originalKey = `${md5}/original${ext}`;
+  const original = await ensure(originalKey, () => download(originalKey, `files/${md5}${ext}`));
   if (!original) return undefined;
   const file = path.join(cacheDir(), key);
-  await writeAtomic(file, (temp) => sharp(path.join(cacheDir(), name), { animated: true }).resize({ width, withoutEnlargement: true }).webp({ quality: 80 }).toFile(temp));
+  await writeAtomic(file, (temp) => sharp(path.join(cacheDir(), originalKey), { animated: true }).resize({ width, withoutEnlargement: true }).webp({ quality: 80 }).toFile(temp));
   return writeMeta(key, { contentType: "image/webp", etag: `"${original.etag.replaceAll('"', "")}-w${width}"`, size: (await stat(file)).size });
 }
 
@@ -98,15 +100,16 @@ async function scale(name: string, width: number, key: string): Promise<Meta | u
 const matches = (header: string | null, etag: string) =>
   header !== null && header.split(",").some((tag) => tag.trim() === "*" || tag.trim().replace(/^W\//, "") === etag);
 
-/** Serves the original `name` (validated by `FILE_NAME`) from the disk cache, fetching it from NovaDB first if it is not there yet. 404 if NovaDB has no such file. */
-export function serveMedia(name: string, request: Request): Promise<Response> {
-  return respond(name, () => download(name, `files/${name}`), request);
+/** Serves `/media/{md5}/original{ext}`, fetching `files/{md5}{ext}` first if it is not cached yet; 404 if NovaDB has no such file. The caller has validated both parts as a file name (`FILE_NAME`), which makes the cache key safe. */
+export function serveOriginal(md5: string, ext: string, request: Request): Promise<Response> {
+  const key = `${md5}/original${ext}`;
+  return respond(key, () => download(key, `files/${md5}${ext}`), request);
 }
 
-/** Serves the file `name` scaled to one of `MEDIA_WIDTHS`; the caller has validated both. */
-export function serveScaled(name: string, width: number, request: Request): Promise<Response> {
-  const key = `${width}/${name}`;
-  return respond(key, () => scale(name, width, key), request);
+/** Serves `/media/{md5}/{width}{ext}.webp`, the file scaled to one of `MEDIA_WIDTHS`; the caller has validated all three. */
+export function serveScaled(md5: string, ext: string, width: number, request: Request): Promise<Response> {
+  const key = `${md5}/${width}${ext}.webp`;
+  return respond(key, () => scale(md5, ext, width, key), request);
 }
 
 async function respond(key: string, build: () => Promise<Meta | undefined>, request: Request): Promise<Response> {
