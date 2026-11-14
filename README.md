@@ -143,3 +143,37 @@ From the shared contract (the reference's HTML and behaviour), because most page
 - **Astro's markup.** Pages carry no framework markup: the HTML is the same as the shared structure but for
   whitespace and attribute order, which Astro serialises its own way. Fingerprinted file names (`/_astro/…`) are the
   bundler's.
+
+## On Cloudflare
+
+The three parts above exist because Caddy, a small server and a builder are what it takes to serve files, answer a POST
+and build again on a plain Kubernetes cluster. On Cloudflare the same site needs one Worker with static assets, one
+bucket and a schedule. This is a description, not a second demo: nothing here has been run, and the open questions
+below are the ones to answer first.
+
+| Here | On Cloudflare |
+|---|---|
+| Caddy with the sidecar `sync`: pages, `/_astro/…` and the 404 page as files | [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/): a request that matches a file is answered with it, and the Worker runs only when none does. `html_handling = "auto-trailing-slash"` serves `de/shop.html` as `/de/shop` and `de/index.html` as `/de/`, which is the Caddyfile's one-URL-per-page rule |
+| `app`: a POST to a page's URL, `POST /api/suggest` | The same Worker (`@astrojs/cloudflare`): on-demand routes under `src/pages/post/` and `api/`, as today. `run_worker_first` takes route patterns with `!` exclusions, so the Worker can take `/api/*` first |
+| `/` leads to the region by `Accept-Language` | A small handler in the Worker, `run_worker_first = ["/"]`; a static redirect rule cannot look at a header |
+| `builder`: polls `updateInfo`, builds, publishes on the shared volume | A cron trigger of the Worker reads `updateInfo`, keeps `changeTrackingVersion` and the time of its last change in KV, and starts a build when it has been still for the quiet time. The build is `astro build` followed by `wrangler deploy`; where it runs (the platform's own builds or a pipeline) is open |
+| Pictures made by the builder with `sharp`, kept on the shared volume | A Worker route for `/media/{md5}/…`: the original is fetched from NovaDB once and kept in R2; a scaled copy is made once with the [Images binding](https://developers.cloudflare.com/images/optimization/binding/) (`transform({ width })`, `output({ format: "image/webp", quality: 80 })`) and kept in R2 as well. A build has no disk that outlives it, so the pictures do not belong in it |
+
+**What falls away:** the shared volume and `current.json`, the sync process and its symlink swap, `CODE_VERSION` (a
+deployment is one version of pages and server code together), the Caddyfile, the images and the TLS settings.
+
+**What stays:** the pages are as fresh as the last build, `SITE_URL` fixes the origin of canonical and hreflang URLs, a new
+page or product has its URL after the next build, and a posted range, a search and the suggestions read the Delivery
+API live. The Delivery login is a Worker secret.
+
+**Open, to check before anyone builds this:**
+
+- Does a POST to a path that also has a file reach the Worker? The documentation describes routing by path and does not
+  say what a method changes. With the Node adapter it does not (see "How a request is answered"); if the Cloudflare
+  answer is the same, the Worker moves the POST to `/post/…` as `scripts/post.mjs` does.
+- How `not_found_handling` serves the 404 page, and so whether each region can have its own, which would remove the
+  "One 404 page" deviation.
+- Whether the Images binding keeps an animated picture animated, never enlarges, and applies quality 80 as the contract
+  asks; its documentation names width, format and quality, not these.
+- Whether a build can be started from the cron trigger's side without a pipeline of our own.
+- The cost of a posted filter in a Worker's CPU time: the facets are counted over the whole range on every request.
