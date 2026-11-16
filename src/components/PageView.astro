@@ -11,9 +11,9 @@ import Range from "./Range.astro";
 interface Props { data: PageData }
 const { data } = Astro.props;
 ---
-<Layout region={data.region} title={data.title} seo={seoOf(data.canonical, data.alternates)} alternates={data.alternates}>
+<Layout region={data.region} title={data.title} seo={seoOf(data.canonical, data.alternates, data.seoHints)} alternates={data.alternates}>
   <Crumbs items={data.crumbs} label={data.ctx.text.breadcrumb} />
   {data.kind === "product"
-    ? <ProductDetail ctx={data.ctx} product={data.product} groupName={data.groupName} similar={data.similar} />
+    ? <ProductDetail ctx={data.ctx} product={data.product} groupName={data.groupName} contents={data.contents} similar={data.similar} accessories={data.accessories} spareParts={data.spareParts} />
     : <Content node={data.content} ctx={data.ctx}>{data.range && <Range range={data.range} ctx={data.ctx} groupNames={data.groupNames} pageUrl={data.canonical} />}</Content>}
 </Layout>

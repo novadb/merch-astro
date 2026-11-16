@@ -1,24 +1,37 @@
 ---
-// The product page: PIM data (price per market, stock, specs) plus similar products.
+// The product page: PIM data (price per market, stock, specs, claims, set contents) plus similar products, accessories and spare parts.
 import type { Ctx } from "../lib/content";
 import { formatPrice } from "../lib/i18n";
 import { srcSet } from "../lib/images";
-import type { Product } from "../lib/products";
+import { colorsOf, inStockOf, type Product, type SetRow } from "../lib/products";
 import { PRODUCT_SIZES } from "../lib/sizes";
 import ProductCard from "./ProductCard.astro";
 
-interface Props { ctx: Ctx; product: Product; groupName?: string; similar: Product[] }
-const { ctx, product: p, groupName, similar } = Astro.props;
+interface Props {
+  ctx: Ctx;
+  product: Product;
+  groupName?: string;
+  /** The rows of a set product, see `setContents`. */
+  contents: SetRow[];
+  similar: Product[];
+  accessories: Product[];
+  spareParts: Product[];
+}
+const { ctx, product: p, groupName, contents, similar, accessories, spareParts } = Astro.props;
 const { text, region } = ctx;
+const inStock = inStockOf(p);
+const deliveryDays = p.articles.filter((a) => a.stock > 0).flatMap((a) => a.deliveryDays ?? []);
 const specs: [string, string][] = [
-  [text.sku, p.sku ?? ""],
-  [text.colour, p.color ? text.value(p.color) : ""],
+  [text.sku, p.articles.map((a) => a.sku).join(", ")],
+  [text.colour, colorsOf(p).map(text.value).join(", ")],
   [text.material, p.materials.map(text.value).join(", ")],
   [text.volume, p.volume ? `${p.volume} ml` : ""],
   [text.screenSize, p.screenSize ? `${p.screenSize}″` : ""],
   [text.finish, p.finishes.map(text.value).join(", ")],
   [text.pieces, p.pieces ? text.pieceCount(p.pieces) : ""],
+  [text.delivery, deliveryDays.length ? String(Math.min(...deliveryDays)) : ""],
 ];
+const bands: [string, Product[]][] = [[text.similar, similar], [text.accessories, accessories], [text.spareParts, spareParts]];
 ---
 <article class="pdp">
   <div class="pdp__media">
@@ -29,9 +42,9 @@ const specs: [string, string][] = [
     <h1 class="pdp__name">{p.name}</h1>
     <p class="pdp__price">
       {formatPrice(p.price, ctx.market, region)}
-      <span class={p.inStock === false ? "badge badge--muted" : "badge"}>{p.inStock === false ? text.soldOut : text.available}</span>
+      <span class={inStock === false ? "badge badge--muted" : "badge"}>{inStock === false ? text.soldOut : text.available}</span>
     </p>
-    {p.shopifyId && p.inStock !== false && <div class="pdp__buy" data-shopify-product={p.shopifyId}></div>}
+    {p.shopifyId && inStock !== false && <div class="pdp__buy" data-shopify-product={p.shopifyId}></div>}
     {p.descriptionHtml && <div class="pdp__description" set:html={p.descriptionHtml} />}
     <dl class="specs">
       {specs.filter(([, value]) => value).map(([name, value]) => (
@@ -41,11 +54,25 @@ const specs: [string, string][] = [
         </div>
       ))}
     </dl>
+    {contents.length > 0 && (
+      <>
+        <h2 class="pdp__subhead">{text.setContents}</h2>
+        <ul class="pdp__list">
+          {contents.map((row) => <li>{row.quantity} × {row.url ? <a href={row.url}>{row.name}</a> : row.name}</li>)}
+        </ul>
+      </>
+    )}
+    {p.claims.length > 0 && (
+      <>
+        <h2 class="pdp__subhead">{text.claims}</h2>
+        <ul class="pdp__list">{p.claims.map((claim) => <li>{claim}</li>)}</ul>
+      </>
+    )}
   </div>
 </article>
-{similar.length > 0 && (
+{bands.filter(([, products]) => products.length > 0).map(([title, products]) => (
   <section class="merchBand">
-    <h2 class="headline">{text.similar}</h2>
-    <div class="grid">{similar.map((s) => <ProductCard product={s} ctx={ctx} />)}</div>
+    <h2 class="headline">{title}</h2>
+    <div class="grid">{products.map((s) => <ProductCard product={s} ctx={ctx} />)}</div>
   </section>
-)}
+))}

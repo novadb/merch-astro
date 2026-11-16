@@ -12,7 +12,7 @@ const REPO = "merch-astro";
 interface Props {
   region: Region;
   title?: string;
-  /** Canonical and hreflang links; a search result has none. */
+  /** Canonical and hreflang links, description and robots; a search result has none. */
   seo?: Seo;
   alternates?: Partial<Record<Region, string>>;
 }
@@ -25,6 +25,8 @@ const { text, home, nav, shop } = await loadShell(region);
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{`${title ?? text.siteName} · ${text.siteName}`}</title>
     {seo && <link rel="canonical" href={seo.canonical} />}
+    {seo?.description && <meta name="description" content={seo.description} />}
+    {seo?.robots && <meta name="robots" content={seo.robots} />}
     {seo?.alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     {shop && <meta name="shopify-domain" content={shop.domain} />}

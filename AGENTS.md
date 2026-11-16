@@ -19,8 +19,8 @@ Non-goals: client-side navigation, a UI framework, NovaDB writes, a database, qu
 - Run: `docker compose up --build` (http://localhost:4002), the Delivery login and `SITE_URL` in `.env` (`.env.example`); it answers after the first build. `npm run dev` renders every request live.
 - `npm run typecheck` (`astro check`), `npm run build`, `docker build .`
 - Local container (podman): `uv run scripts/refresh-container.py` after every completed change.
-- Tests: the shared Playwright suite, from its checkout: `BASE_URL=http://localhost:4002 npx playwright test`. The tests tagged `@shopify` need the Shopify variables.
-- Done means: typecheck, build and `docker build` pass and the suite is green against the real Delivery API, but for the tests named under "Deviations". Report each gate.
+- Tests: the shared Playwright suite (outside this repository, one project per demo), from its folder: `BASE_URL=http://localhost:4002 npx playwright test --project astro`. The tests tagged `@shopify` need the Shopify variables.
+- Done means: typecheck, build and `docker build` pass and the suite is green against the real Delivery API (what the README names under "Deviations" the suite checks as this demo's own variant). Report each gate.
 - Check a changed page with `curl` too: the file and a POST's answer are two renders of one component.
 
 ## NovaDB
@@ -28,6 +28,7 @@ Non-goals: client-side navigation, a UI framework, NovaDB writes, a database, qu
 Before touching `src/lib/` or the content components read `NOVADB.md`: the model and the Delivery API's concepts (identifiers, `lang`, `props`, variants, references, Visual Document, files, search). The wire protocol is in the product documentation it links. `README.md` lists which file does what.
 
 - Read-only; branch `merchDemo`.
+- Only products and articles in the workflow state "released" (`WORKFLOW_RELEASED`) are on the site, never an unfinished one: an unreleased product has no page. A product is the card, URL and page; SKU, colour, stock and delivery time come from its articles.
 - Every NovaDB name (branch, types, attributes, market variants) is an API identifier and stands only in `src/lib/schema.ts`. An unavoidable numeric ID goes there too, as a named constant.
 - A missing `props` key means unset or untranslated: omit it, never fall back to another language or `displayName`.
 - Never print or log `NOVA_DELIVERY_URL/USER/PASSWORD`; they are `astro:env` secrets and never reach the browser: pictures go through the `/media` proxy.

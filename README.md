@@ -42,8 +42,9 @@ Caddy's redirect by language, so the dev server starts at `/de/`.
 
 ## Test
 
-The site passes the shared Playwright behaviour suite of the Nova Merchandising demos but for the test named
-under "Deviations": run it from its checkout with `BASE_URL=http://localhost:4002 npx playwright test`. The tests tagged
+The site passes the shared Playwright behaviour suite of the Nova Merchandising demos (not part of this repository, one
+project per demo), which checks the deviations below as this demo's own variant: run it from its folder with
+`BASE_URL=http://localhost:4002 npx playwright test --project astro` (`SITE_URL` must be that address). The tests tagged
 `@shopify` (buy button, cart) need the Shopify variables.
 
 ## How a request is answered
@@ -106,7 +107,7 @@ under "Deviations": run it from its checkout with `BASE_URL=http://localhost:400
 | `src/lib/delivery.ts` | Delivery API client: Basic auth from the environment, 60 s cache |
 | `src/lib/i18n.ts`, `labels.ts` | regions (`de`, `uk`, `us`: content language, market, currency) and the UI texts, read from NovaDB's labels |
 | `src/lib/site.ts` | page tree, URLs from `merchPageUrlSegment` + parent page, breadcrumb, category page of a group |
-| `src/lib/products.ts`, `catalog.ts` | the product type, full-text filter, facets (counted on the server), sorting; reading products |
+| `src/lib/products.ts`, `catalog.ts` | the product and article types, full-text filter, facets (counted on the server), sorting; reading released products with their articles, claims and set rows |
 | `src/lib/content.ts`, `page-data.ts`, `search.ts` | a page's Visual Document resolved for rendering; what a page, a product and the search page show |
 | `src/lib/images.ts`, `media.ts`, `src/pages/media/` | picture URLs by content address and their `srcset`; the store the builder makes the pictures with (a disk cache laid out like the URLs, scaled WebP variants with `sharp`), and the route that serves it to the dev server |
 | `src/lib/request.ts`, `seo.ts`, `sizes.ts` | region and posted fields of a request; canonical and hreflang URLs; the pictures' `sizes` |
@@ -139,11 +140,11 @@ it costs in every demo (the range is filtered and counted on the server).
 From the shared contract (the reference's HTML and behaviour), because most pages are files:
 
 - **Pages are as fresh as the last build.** A change in NovaDB reaches the pre-rendered pages after the poll (30 s), the
-  quiet time (30 s) and a build (about 7 s). A new page or product has its URL only then; until then it is a 404. A
+  quiet time (30 s) and a build (about 7 s). A new or newly released product has its URL only then (before that it is a 404), and a withdrawn one keeps its page until then. A
   posted range, a search and the suggestions read the Delivery API live (60 s cache), so they can be newer than the page around them.
 - **`SITE_URL` is required, and the canonical origin does not follow the ingress headers.** A built page holds its
   canonical and hreflang URLs; there is no request to read a host from. The shared suite's test "the canonical origin
-  follows the ingress headers" does not apply.
+  follows the ingress headers" expects the configured address here, whatever the headers say.
 - **A picture is a file the builder made before the page that shows it goes live, and Caddy never asks the app for a
   static asset.** Until a picture has reached Caddy's folder (after the build, at most `MEDIA_SYNC_SECONDS`, 60 by
   default) it is a 404; a scaled variant that is missing is answered with the original, which the browser keeps for 15
@@ -152,7 +153,7 @@ From the shared contract (the reference's HTML and behaviour), because most page
 - **A posted form is answered under `/api/page/…`.** The filters, the sorting, "Show more" and the search post to
   `/api/page/{region}/{path}` and `/api/page/{region}/search`, not to the page's own URL; without JavaScript that URL
   is in the address bar after a post. Files and app are told apart by path alone, as a CDN routes.
-  A POST to a page's own URL is a 405, so the two tests of the shared suite that post there directly (a form behind a proxy that ends TLS, a body that is no form) do not apply.
+  A POST to a page's own URL is a 405; the shared suite posts to `/api/page/…` instead and expects the 405 on the page's own URL.
 - **One 404 page.** `404.html` is built once, in English, for `/de/…` too.
 - **Astro's markup.** Pages carry no framework markup: the HTML is the same as the shared structure but for
   whitespace and attribute order, which Astro serialises its own way. Fingerprinted file names (`/_astro/…`) are the

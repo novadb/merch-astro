@@ -3,9 +3,10 @@ import { documentImages, contentTargets, imageIds, referencedIds, type ContentCt
 import { alternatesOf, MARKET, OTHER_LANGUAGE_REGION, type Region } from "./i18n";
 import { loadText } from "./labels";
 import { imagesByIds } from "./images";
-import { loadProducts, productByPath, productsByIds } from "./catalog";
-import { rangeOf, type Product, type RangeData } from "./products";
+import { loadProducts, productByPath, productsByIds, setContents } from "./catalog";
+import { rangeOf, type Product, type RangeData, type SetRow } from "./products";
 import { PRODUCT } from "./schema";
+import type { SeoHints } from "./seo";
 import { breadcrumb, categoryPage, loadGroups, loadSite, type Page, type Site, type VNode } from "./site";
 
 /** A page in the breadcrumb, named as in the navigation. */
@@ -14,13 +15,15 @@ const toCrumb = (p: { url: string; navTitle: string }): Target => ({ url: p.url,
 export type PageData = {
   region: Region;
   title: string;
+  /** What the page asks of search engines (`seoOf`); a CMS page asks nothing. */
+  seoHints: SeoHints;
   /** The clean URL, without region switch or query. */
   canonical: string;
   alternates: Partial<Record<Region, string>>;
   crumbs: Target[];
 } & (
   | { kind: "page"; content?: VNode; ctx: ContentCtx; range?: RangeData; groupNames: Map<number, string> }
-  | { kind: "product"; product: Product; groupName?: string; similar: Product[]; ctx: Ctx }
+  | { kind: "product"; product: Product; groupName?: string; contents: SetRow[]; similar: Product[]; accessories: Product[]; spareParts: Product[]; ctx: Ctx }
 );
 
 /** The live range of a category page for the posted fields: the products of its groups; undefined for a page without one. */
@@ -59,6 +62,7 @@ async function pageData(site: Site, page: Page, groups: Map<number, string>, reg
     kind: "page", region,
     canonical: page.url,
     title: page.title,
+    seoHints: {},
     alternates: alternatesOf(region, page.path, otherSite.pages.get(page.id)?.path),
     crumbs: breadcrumb(site, page).map(toCrumb),
     content: page.content,
@@ -75,8 +79,11 @@ async function pageData(site: Site, page: Page, groups: Map<number, string>, reg
 
 async function productData(site: Site, groups: Map<number, string>, product: Product, region: Region): Promise<PageData> {
   const market = MARKET[region];
-  const [similar, [other], text] = await Promise.all([
+  const [similar, accessories, spareParts, contents, [other], text] = await Promise.all([
     productsByIds(product.similar, region, market),
+    productsByIds(product.accessories, region, market),
+    productsByIds(product.spareParts, region, market),
+    setContents(product, region, market),
     productsByIds([product.id], OTHER_LANGUAGE_REGION[region], market),
     loadText(region),
   ]);
@@ -84,11 +91,15 @@ async function productData(site: Site, groups: Map<number, string>, product: Pro
   return {
     kind: "product", region,
     canonical: product.url,
-    title: product.name,
+    title: product.seo.title ?? product.name,
+    seoHints: product.seo,
     alternates: alternatesOf(region, product.path, other?.path),
     product,
     groupName: product.groupId ? groups.get(product.groupId) : undefined,
+    contents,
     similar,
+    accessories,
+    spareParts,
     ctx: { region, market, text },
     crumbs: [...breadcrumb(site, category).map(toCrumb), { url: product.url, title: product.name }],
   };
