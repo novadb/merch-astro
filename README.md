@@ -1,5 +1,14 @@
 # Nova Merchandising — Astro
 
+**Live:** <https://astro.merch.novadb.com/>: this repository's `main`, running against NovaDB. `/` picks the region by
+browser language (`/de/`, `/uk/`, `/us/`); the checkout is in Shopify's test mode.
+
+The same shop in other stacks: React Router ([live](https://react-router.merch.novadb.com/),
+[source](https://github.com/novadb/merch-react-router)) · ASP.NET Core Blazor
+([live](https://blazor-dotnet.merch.novadb.com/), [source](https://github.com/novadb/merch-blazor-dotnet)) · Razor
+Pages + htmx ([live](https://razor-htmx.merch.novadb.com/), [source](https://github.com/novadb/merch-razor-htmx)) ·
+Nuxt ([live](https://vue-nuxt.merch.novadb.com/), [source](https://github.com/novadb/merch-vue-nuxt))
+
 The demo site of NovaDB as CMS and PIM in one, built with Astro 7 in TypeScript: **every page and product is built to
 HTML ahead of time** from NovaDB's Delivery API (branch `merchDemo`), plain `fetch`, no NovaDB package, no UI framework.
 Three parts run it, each on its own (three Kubernetes Deployments, or `compose.yaml`): **Caddy** receives every request
