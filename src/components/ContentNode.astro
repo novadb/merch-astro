@@ -17,7 +17,8 @@ const target = node.type === "object" && node.objectId ? ctx.targets[node.object
 {node.type === "group" ? (
   <Tag class={node.class}>{node.children?.map((child) => <Astro.self node={child} ctx={ctx} sizes={childSizes} />)}</Tag>
 ) : node.type === "image" ? (
-  image && <img class={node.class} src={image} srcset={srcSet(image)} sizes={sizes} alt="" loading="lazy" />
+  // The first picture is on screen at once (the hero): lazy loading would delay the largest contentful paint.
+  image && <img class={node.class} src={image} srcset={srcSet(image)} sizes={sizes} alt="" loading={node === ctx.firstImage ? "eager" : "lazy"} fetchpriority={node === ctx.firstImage ? "high" : undefined} />
 ) : node.type === "object" ? (
   // Like the CMS, which wraps what an object component renders in the component's own element: the editor's
   // stylesheet (built from site.css) then matches the same DOM as the site.

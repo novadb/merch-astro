@@ -10,9 +10,10 @@ export type Target = { url: string; title: string; image?: string };
 export type Ctx = { region: Region; market: Market; text: Texts };
 /**
  * `products`: the products the document embeds as cards, `targets` the pages it links to or teases, and `images` the
- * picture URL (`/media/{md5}/original{ext}`) of each image object it embeds, all by object ID.
+ * picture URL (`/media/{md5}/original{ext}`) of each image object it embeds, all by object ID. `firstImage` is the
+ * first picture of the document, which `Content.astro` sets; it loads at once, as the others do not.
  */
-export type ContentCtx = Ctx & { products: Record<number, Product>; targets: Record<number, Target>; images: Record<number, string> };
+export type ContentCtx = Ctx & { products: Record<number, Product>; targets: Record<number, Target>; images: Record<number, string>; firstImage?: VNode };
 
 /** Object IDs a document refers to: embedded objects and links inside rich text. */
 export function referencedIds(node: VNode | undefined, into = new Set<number>()): Set<number> {
@@ -29,6 +30,15 @@ export function imageIds(node: VNode | undefined, into = new Set<number>()): Set
   if (node.objectId && node.type === "image") into.add(node.objectId);
   node.children?.forEach((child) => imageIds(child, into));
   return into;
+}
+
+/** The first image node in document order that `ContentNode.astro` renders. */
+export function firstImage(node: VNode, images: ContentCtx["images"]): VNode | undefined {
+  if (node.type === "image" && node.objectId && images[node.objectId]) return node;
+  for (const child of node.children ?? []) {
+    const found = firstImage(child, images);
+    if (found) return found;
+  }
 }
 
 /** Turns CMS links (`object?branch=…&objectId=N`) into site URLs and drops editor-only attributes. */

@@ -1,11 +1,12 @@
 ---
 // Renders a Visual Document (the page content); the slot (the live range) goes right after its first component, the hero.
-import type { ContentCtx } from "../lib/content";
+import { firstImage, type ContentCtx } from "../lib/content";
 import type { VNode } from "../lib/site";
 import ContentNode from "./ContentNode.astro";
 
 interface Props { node?: VNode; ctx: ContentCtx }
-const { node, ctx } = Astro.props;
+const { node, ctx: documentCtx } = Astro.props;
+const ctx = { ...documentCtx, firstImage: node && firstImage(node, documentCtx.images) };
 const [first, ...rest] = node?.children ?? [];
 const Tag = (node?.element || "div") as "div"; // the CMS names the element; typed as one so that its attributes check
 ---
