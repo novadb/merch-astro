@@ -19,7 +19,7 @@ Non-goals: client-side navigation, a UI framework, NovaDB writes, a database, qu
 - Run: `docker compose up --build` (http://localhost:4002), the Delivery login and `SITE_URL` in `.env` (`.env.example`); it answers after the first build. `npm run dev` renders every request live.
 - `npm run typecheck` (`astro check`), `npm run build`, `docker build .`
 - Local container (podman): `uv run scripts/refresh-container.py` after every completed change.
-- Tests: the shared Playwright suite, from its checkout: `BASE_URL=http://localhost:4002 npx playwright test` (Firefox). The tests tagged `@shopify` need the Shopify variables.
+- Tests: the shared Playwright suite, from its checkout: `BASE_URL=http://localhost:4002 npx playwright test`. The tests tagged `@shopify` need the Shopify variables.
 - Done means: typecheck, build and `docker build` pass and the suite is green against the real Delivery API, but for the tests named under "Deviations". Report each gate.
 - Check a changed page with `curl` too: the file and a POST's answer are two renders of one component.
 

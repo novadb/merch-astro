@@ -33,7 +33,7 @@ Caddy's redirect by language, so the dev server starts at `/de/`.
 
 ## Test
 
-The site passes the shared Playwright behaviour suite of the Nova Merchandising demos (Firefox) but for the test named
+The site passes the shared Playwright behaviour suite of the Nova Merchandising demos but for the test named
 under "Deviations": run it from its checkout with `BASE_URL=http://localhost:4002 npx playwright test`. The tests tagged
 `@shopify` (buy button, cart) need the Shopify variables.
 
