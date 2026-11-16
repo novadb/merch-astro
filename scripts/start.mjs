@@ -1,7 +1,7 @@
 /**
- * The app: the on-demand routes (a posted form and `/api/suggest`), behind Caddy, which serves the built pages and
- * pictures itself (`Caddyfile`). A server of our own around the adapter's handler, because a POST to a page must reach
- * the route under `/post` (`post.mjs`) and the code comes from the builder's output, not from this image.
+ * The app: the on-demand routes under `/api/` (a posted form and the typeahead), behind Caddy, which serves the built
+ * pages and pictures itself (`Caddyfile`). A server of our own around the adapter's handler, because the code comes
+ * from the builder's output, not from this image, and what no route answers is the built 404 page.
  */
 import { createReadStream } from "node:fs";
 import { cp, mkdir, readFile, rm } from "node:fs/promises";
@@ -9,7 +9,6 @@ import http from "node:http";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
-import { routePost } from "./post.mjs";
 
 const share = path.resolve(process.env.SHARE_DIR ?? "share");
 const site = path.resolve(process.env.SITE_DIR ?? "site");
@@ -58,7 +57,4 @@ function notFound(res) {
     .pipe(res);
 }
 
-http.createServer((req, res) => {
-  routePost(req);
-  ssr(req, res, () => notFound(res));
-}).listen(port, host, () => console.log(`app listening on ${host}:${port}`));
+http.createServer((req, res) => ssr(req, res, () => notFound(res))).listen(port, host, () => console.log(`app listening on ${host}:${port}`));

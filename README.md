@@ -44,13 +44,14 @@ under "Deviations": run it from its checkout with `BASE_URL=http://localhost:400
    `/uk/shop/t-shirts` and `/media/<md5>/400.jpg.webp` are files, what is none is a 404 (the built `404.html`), and `/`
    is a redirect by the first tag of `Accept-Language` (`de` to `/de/`, British English and its neighbours to `/uk/`,
    else `/us/`). It never reads the shared volume and never asks the app for a GET.
-2. Every POST and `/api/*` go to the **app** (`scripts/start.mjs`, port 3001; `APP_ADDRESS` for Caddy): the adapter's
-   handler with the routes `api/suggest` and those under `src/pages/post/`. A POST to `/uk/shop/t-shirts` is moved to
-   `/post/uk/shop/t-shirts` (`scripts/post.mjs`), because the page's own route is pre-rendered and answers only a GET.
-   The routes `media/…` are for the dev server only: the builder makes the pictures itself.
+2. Only `/api/*` goes to the **app** (`scripts/start.mjs`, port 3001; `APP_ADDRESS` for Caddy): the adapter's handler
+   with the routes `api/suggest` and those under `src/pages/api/page/`. A filter, a sorting, "Show more" or a search is
+   a POST to `/api/page/uk/shop/t-shirts` or `/api/page/uk/search`: the forms' `action` names that URL, and the answer
+   is the whole page. Any other method outside `/api/` is a 405. The routes `media/…` are for the dev server only: the
+   builder makes the pictures itself.
 3. A page is `src/pages/[region]/[...path].astro`: `getStaticPaths` lists every page and product of the three regions,
-   `loadPage` reads its data, `PageView.astro` prints it. The POST route prints the same component with the posted
-   filters.
+   `loadPage` reads its data, `PageView.astro` prints it. The route under `/api/page/` prints the same component with
+   the posted filters.
 4. The **builder** (`scripts/watch.mjs`) builds when `changeTrackingVersion` of `updateInfo` has moved and stayed still
    for 30 s (a build takes about 7 s; a failed one leaves the last good pages). Before it publishes the build it makes
    every picture the pages show, in its own process with the code of its image (`src/lib/media.ts`): each is written to
@@ -101,13 +102,13 @@ under "Deviations": run it from its checkout with `BASE_URL=http://localhost:400
 | `src/lib/images.ts`, `media.ts`, `src/pages/media/` | picture URLs by content address and their `srcset`; the store the builder makes the pictures with (a disk cache laid out like the URLs, scaled WebP variants with `sharp`), and the route that serves it to the dev server |
 | `src/lib/request.ts`, `seo.ts`, `sizes.ts` | region and posted fields of a request; canonical and hreflang URLs; the pictures' `sizes` |
 | `src/pages/[region]/` | the pre-rendered pages, products and the empty search |
-| `src/pages/post/`, `api/suggest.ts`, `404.astro` | the answers to a posted form, the typeahead's JSON and the 404 page |
+| `src/pages/api/`, `404.astro` | the answers to a posted form (`page/`), the typeahead's JSON (`suggest.ts`) and the 404 page |
 | `src/layouts/Layout.astro` | document, header, region switch, footer |
 | `src/components/` | `PageView`, `SearchView`, `Content`/`ContentNode` (the Visual Document), `Range`, `Facet`, `ProductCard`, `ProductDetail`, `SearchForm`, `Crumbs` |
 | `src/styles/site.css`, `src/scripts/site.js`, `public/` | the stylesheet, the client script, fonts, icons, `robots.txt`: the same files in every demo |
 | `Caddyfile`, `compose.yaml`, `Dockerfile` | the web server in front; the parts and their volumes; the image of the app, the builder and the sync |
-| `scripts/start.mjs`, `watch.mjs`, `sync.mjs`, `post.mjs` | the app's server, the builder, Caddy's copy of the files, the rule that moves a POST |
-| `astro.config.mjs` | the adapter, the environment variables (validated at start and build), the dev server's POST rule |
+| `scripts/start.mjs`, `watch.mjs`, `sync.mjs` | the app's server, the builder, Caddy's copy of the files |
+| `astro.config.mjs` | the adapter and the environment variables (validated at start and build) |
 
 ## Load times
 
@@ -139,6 +140,10 @@ From the shared contract (the reference's HTML and behaviour), because most page
   default) it is a 404; a scaled variant that is missing is answered with the original, which the browser keeps for 15
   minutes. The same holds for pages and
   `/_astro/…`: a missing one is Caddy's own 404, and `/` is a redirect Caddy answers itself.
+- **A posted form is answered under `/api/page/…`.** The filters, the sorting, "Show more" and the search post to
+  `/api/page/{region}/{path}` and `/api/page/{region}/search`, not to the page's own URL; without JavaScript that URL
+  is in the address bar after a post. Files and app are told apart by path alone, as a CDN routes.
+  A POST to a page's own URL is a 405, so the two tests of the shared suite that post there directly (a form behind a proxy that ends TLS, a body that is no form) do not apply.
 - **One 404 page.** `404.html` is built once, in English, for `/de/…` too.
 - **Astro's markup.** Pages carry no framework markup: the HTML is the same as the shared structure but for
   whitespace and attribute order, which Astro serialises its own way. Fingerprinted file names (`/_astro/…`) are the
@@ -154,7 +159,7 @@ below are the ones to answer first.
 | Here | On Cloudflare |
 |---|---|
 | Caddy with the sidecar `sync`: pages, `/_astro/…` and the 404 page as files | [Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/): a request that matches a file is answered with it, and the Worker runs only when none does. `html_handling = "auto-trailing-slash"` serves `de/shop.html` as `/de/shop` and `de/index.html` as `/de/`, which is the Caddyfile's one-URL-per-page rule |
-| `app`: a POST to a page's URL, `POST /api/suggest` | The same Worker (`@astrojs/cloudflare`): on-demand routes under `src/pages/post/` and `api/`, as today. `run_worker_first` takes route patterns with `!` exclusions, so the Worker can take `/api/*` first |
+| `app`: `POST /api/page/…`, `POST /api/suggest` | The same Worker (`@astrojs/cloudflare`): the on-demand routes under `src/pages/api/`, as today. `run_worker_first = ["/api/*"]` sends exactly these paths to the Worker and every other to the assets |
 | `/` leads to the region by `Accept-Language` | A small handler in the Worker, `run_worker_first = ["/"]`; a static redirect rule cannot look at a header |
 | `builder`: polls `updateInfo`, builds, publishes on the shared volume | A cron trigger of the Worker reads `updateInfo`, keeps `changeTrackingVersion` and the time of its last change in KV, and starts a build when it has been still for the quiet time. The build is `astro build` followed by `wrangler deploy`; where it runs (the platform's own builds or a pipeline) is open |
 | Pictures made by the builder with `sharp`, kept on the shared volume | A Worker route for `/media/{md5}/…`: the original is fetched from NovaDB once and kept in R2; a scaled copy is made once with the [Images binding](https://developers.cloudflare.com/images/optimization/binding/) (`transform({ width })`, `output({ format: "image/webp", quality: 80 })`) and kept in R2 as well. A build has no disk that outlives it, so the pictures do not belong in it |
@@ -168,9 +173,6 @@ API live. The Delivery login is a Worker secret.
 
 **Open, to check before anyone builds this:**
 
-- Does a POST to a path that also has a file reach the Worker? The documentation describes routing by path and does not
-  say what a method changes. With the Node adapter it does not (see "How a request is answered"); if the Cloudflare
-  answer is the same, the Worker moves the POST to `/post/…` as `scripts/post.mjs` does.
 - How `not_found_handling` serves the 404 page, and so whether each region can have its own, which would remove the
   "One 404 page" deviation.
 - Whether the Images binding keeps an animated picture animated, never enlarges, and applies quality 80 as the contract

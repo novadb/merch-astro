@@ -1,0 +1,16 @@
+---
+// POST `/api/page/{region}/{path}`: the range form of a page (facets, sorting, "Show more"), answered with the whole page. It lives under `/api/` so that files and app are told apart by path alone.
+export const prerender = false;
+import PageView from "../../../../components/PageView.astro";
+import { formOf, regionOf } from "../../../../lib/request";
+import { loadPage } from "../../../../lib/page-data";
+
+const region = regionOf(Astro.params.region);
+const form = await formOf(Astro.request);
+if (!region) return new Response(null, { status: 404 });
+if (form instanceof Response) return form;
+
+const data = await loadPage(region, (Astro.params.path ?? "").replace(/^\/+|\/+$/g, ""), form);
+if (!data) return new Response(null, { status: 404 });
+---
+<PageView data={data} />

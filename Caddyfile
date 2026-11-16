@@ -2,8 +2,8 @@
 # and the 404 page are files in its own folder (`SITE_DIR`, kept equal to the shared folder by `scripts/sync.mjs`),
 # without any logic of ours. Caddy answers each of them from that folder or with a 404 and never asks the app for one:
 # the app would only answer what Caddy already knows, at the cost of a hop for every miss. Only what needs a request
-# goes to the app (`scripts/start.mjs`, at `APP_ADDRESS`): a POST (a posted form is answered at the page's own URL) and
-# `/api/*`. No GET reaches it.
+# goes to the app (`scripts/start.mjs`, at `APP_ADDRESS`): `/api/*`, and nothing else. Files and app are told apart by
+# path alone, so a CDN in front needs exactly one path rule, `/api/*` to the app, whatever the method.
 #
 # `SITE_ADDRESS` is the address the site answers on. Behind a proxy that ends TLS: `http://<host>:<port>`, which keeps
 # Caddy from asking for a certificate. Where Caddy ends TLS itself: the bare host name (`astro.example.com`), and it gets
@@ -44,7 +44,7 @@
 		import app
 	}
 
-	# Only a GET or HEAD can be a file: a posted form is answered by the app, at the same URL.
+	# Only a GET or HEAD can be a file.
 	@read method GET HEAD
 	handle @read {
 		root * {$SITE_DIR:/site}
@@ -113,8 +113,11 @@
 		}
 	}
 
+	# Any other method outside `/api/` has no answer here: a posted form lives under `/api/page/`. 405 rather than 404,
+	# because the path may be a page that exists.
 	handle {
-		import app
+		header Allow "GET, HEAD"
+		respond "Method not allowed" 405
 	}
 
 	# What is no file is the built 404 page, one for the whole site, with the status 404.

@@ -1,6 +1,5 @@
 import node from "@astrojs/node";
 import { defineConfig, envField } from "astro/config";
-import { routePost } from "./scripts/post.mjs";
 import { BRANCH } from "./src/lib/schema.ts";
 
 const secret = (optional = false) => envField.string({ context: "server", access: "secret", optional });
@@ -8,7 +7,6 @@ const secret = (optional = false) => envField.string({ context: "server", access
 export default defineConfig({
   // Pages are pre-rendered; a route that sets `prerender = false` is answered on demand by `scripts/start.mjs`.
   adapter: node({ mode: "middleware" }),
-  integrations: [{ name: "post-to-page", hooks: { "astro:server:setup": ({ server }) => server.middlewares.use((req, _res, next) => (routePost(req), next())) } }],
   // `scripts/watch.mjs` builds into a folder of its own and swaps it in under the running server.
   outDir: process.env.BUILD_OUT ?? "./dist",
   // The pages' own URLs end in no slash and a region's home page in one (`/de/`): the `Caddyfile` redirects to that form.

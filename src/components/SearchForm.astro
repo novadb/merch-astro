@@ -1,5 +1,5 @@
 ---
-// The search form: a POST to /{region}/search, the query in the field `q`. With JavaScript site.js makes the input a combobox over POST /api/suggest.
+// The search form: a POST to /api/page/{region}/search, the query in the field `q`. With JavaScript site.js makes the input a combobox over POST /api/suggest.
 import type { Ctx } from "../lib/content";
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
 const { ctx, large = false, query } = Astro.props;
 const { text, region } = ctx;
 ---
-<form class={large ? "search search--large" : "search"} role="search" method="post" action={`/${region}/search`}>
+<form class={large ? "search search--large" : "search"} role="search" method="post" action={`/api/page/${region}/search`}>
   <input type="search" name="q" value={query} placeholder={text.searchPlaceholder} aria-label={text.search} autocomplete="off" data-suggest="/api/suggest" />
   {large && <button type="submit" class="button">{text.search}</button>}
 </form>

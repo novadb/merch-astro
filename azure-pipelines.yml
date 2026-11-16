@@ -70,8 +70,9 @@ steps:
     workingDirectory: $(Pipeline.Workspace)/s/merch-react-router
 
   # No retries: a red test is a finding. The paths the tests use are CMS data. Left out: the tests tagged @shopify
-  # (Shopify is tested locally until further notice) and the one that does not apply to pre-built pages (README, "Deviations").
-  - script: npx playwright test --grep-invert "@shopify|canonical origin follows the ingress headers" --reporter=line,junit
+  # (Shopify is tested locally until further notice) and the three that do not apply to pre-built pages (README, "Deviations"):
+  # the canonical origin, and the two that post to a page's own URL, which only `/api/page/…` answers.
+  - script: npx playwright test --grep-invert "@shopify|canonical origin follows the ingress headers|a form posted through a proxy that ends TLS|posted facet values that are no IDs" --reporter=line,junit
     displayName: Playwright suite (Firefox, without @shopify)
     workingDirectory: $(Pipeline.Workspace)/s/merch-react-router
     env:

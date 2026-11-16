@@ -1,5 +1,5 @@
 ---
-// `/{region}/{path}`: every page and product, rendered once per build. A posted form is answered by `pages/post/[region]/[...path].astro`.
+// `/{region}/{path}`: every page and product, rendered once per build. A posted form is answered by `pages/api/page/[region]/[...path].astro`.
 import type { GetStaticPaths } from "astro";
 import PageView from "../../components/PageView.astro";
 import { loadProducts } from "../../lib/catalog";
