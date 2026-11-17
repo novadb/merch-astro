@@ -17,6 +17,15 @@ what needs a request: a posted filter or search and the typeahead's JSON; a **bu
 picture the pages show and builds the pages again whenever the branch changes. The Delivery login never leaves the app
 and the builder. Caddy and the app scale alone; there is one builder.
 
+## What this demo shows, and what it does not
+
+It shows that **a site on NovaDB is mostly files**: every page, product and picture is made ahead of time and served by
+Caddy, which takes the load, while a small app answers only what needs a request and a builder builds again when the
+branch changes. Three parts that scale apart. It does not render pages on demand (that would be a second renderer of
+every page) and has no UI framework islands: the pages are files and the script is one. Filters, sorting and search are
+POST forms and a filtered view has no address of its own, because a query string on a file's URL would reach Caddy,
+which serves the unfiltered file: that is this approach's way, not a rule of the contract.
+
 Everything works without JavaScript: filters, sorting, "Show more" and search are real POST forms that the server
 answers with the page itself. With JavaScript, the one shared script (`src/scripts/site.js`, the same file as in the
 other demos without client components) applies filters in place, loads more cards while scrolling, offers the typeahead

@@ -6,17 +6,17 @@ Single source of truth for coding agents here; `CLAUDE.md` only imports it. A li
 
 "Nova Merchandising": a demo website that shows NovaDB as CMS and PIM in one. Every page, product, price, picture and UI text comes from NovaDB's Delivery API. Stack: Astro 7 with `@astrojs/node`, TypeScript, plain `fetch`, no NovaDB package and no UI framework.
 
-The idea of this demo: a site on NovaDB is mostly files. Every page, product and picture is made ahead of time and served by Caddy, which takes all the load; a small Node app answers what needs a request (a posted filter or search, the typeahead); a builder builds again when the branch changes. Three parts that scale apart. Everything works without JavaScript; the shared `src/scripts/site.js` adds in-place filters, endless scrolling, typeahead and cart.
+The idea of this demo: a site on NovaDB is mostly files. Every page, product and picture is made ahead of time and served by Caddy, which takes all the load; a small Node app answers what needs a request (a posted filter or search, the typeahead); a builder builds again when the branch changes. Three parts that scale apart. Everything works without JavaScript; the shared `src/scripts/site.js` adds in-place filters, endless scrolling, typeahead and cart. Not shown on purpose: rendering pages on demand, UI framework islands.
 
-Agencies and developers read this code to learn how the stack works with NovaDB. Measure every change against that: a short path from URL to HTML, no layer of our own; the NovaDB code in the open, one place per concern; everything else in the smallest right form; idiomatic Astro and TypeScript.
+Agencies and developers read this code to learn the stack with NovaDB. Measure every change by it: a short path from URL to HTML; the NovaDB code in the open; everything else in the smallest right form; idiomatic Astro and TypeScript.
 
 The same site exists in other stacks and must look and behave identically, but where a pre-built site cannot (README, "Deviations"): HTML structure, CSS classes, label keys, routes and shared files are a contract, checked by the shared Playwright suite. Change none alone.
 
-Non-goals: client-side navigation, a UI framework, NovaDB writes, a database, query strings, our own cart.
+Non-goals: client-side navigation, a UI framework, NovaDB writes, a database, our own cart.
 
 ## Commands and gates
 
-- Run: `docker compose up --build` (http://localhost:4002), the Delivery login and `SITE_URL` in `.env` (`.env.example`); it answers after the first build. `npm run dev` renders every request live.
+- Run: `docker compose up --build` (http://localhost:4002), login and `SITE_URL` in `.env` (`.env.example`); `npm run dev` renders every request live.
 - `npm run typecheck` (`astro check`), `npm run build`, `docker build .`
 - Local container (podman): `uv run scripts/refresh-container.py` after every completed change.
 - Tests: the shared Playwright suite (outside this repository, one project per demo), from its folder: `BASE_URL=http://localhost:4002 npx playwright test --project astro`. The tests tagged `@shopify` need the Shopify variables.
@@ -32,7 +32,7 @@ Before touching `src/lib/` or the content components read `NOVADB.md`: the model
 - Every NovaDB name (branch, types, attributes, market variants) is an API identifier and stands only in `src/lib/schema.ts`. An unavoidable numeric ID goes there too, as a named constant.
 - A missing `props` key means unset or untranslated: omit it, never fall back to another language or `displayName`.
 - Never print or log `NOVA_DELIVERY_URL/USER/PASSWORD`; they are `astro:env` secrets and never reach the browser: pictures go through the `/media` proxy.
-- `src/lib/delivery.ts` caches responses for 60 s, in the process that reads (the builder, the server). A pre-rendered page is as fresh as its last build; a posted range, a search and a suggestion read live.
+- `src/lib/delivery.ts` caches responses for 60 s, in the process that reads (the builder, the server). A pre-rendered page is as fresh as its last build; a range, search and suggestion read live.
 - A UI text is a `merchLabel` object in NovaDB: a new text is a new label there plus its key in `src/lib/i18n.ts`. The name of a product attribute is not a label: it is the name of the attribute's definition (`ATTRIBUTE_TEXT`). A missing text prints `⟦key⟧` and fails the suite.
 
 ## Rules
@@ -46,13 +46,12 @@ Before touching `src/lib/` or the content components read `NOVADB.md`: the model
 ## Where the code does not say why
 
 - Two kinds of route. `src/pages/[region]/…` are pre-rendered (`getStaticPaths` lists every page and product); `prerender = false` routes run on demand: `api/`, `media/`. A new page or product has its URL after the next build; an on-demand fallback would be a second renderer of every page.
-- A posted form goes to `/api/page/{region}/{path}` (`src/pages/api/page/`), never to the page's own URL: files and app are told apart by path alone, so a CDN needs one rule, `/api/*`. The form's `action` carries that URL (`Range.astro`, `SearchForm.astro`); `site.js` posts to `form.action`. A pre-rendered route answers only a GET, so the page's own URL could not answer the POST anyway.
-- `scripts/watch.mjs` (builder, one) builds in `site/builds/`, copies the build to the shared folder `SHARE_DIR` (`builds/{id}`), last writes `current.json`. Before that it makes every `/media` URL of the pages itself, once each (`src/lib/media.ts`; never by asking the app, whose old version would answer 404, read as "not in NovaDB"). An error stops the build: no pages without pictures. `scripts/sync.mjs` (beside each Caddy) copies build and pictures into Caddy's own folder and swaps its symlink `current`; Caddy never reads the share. `scripts/start.mjs` (the app) waits for a build of its own `CODE_VERSION`, copies `server/` and imports it once: a build's server code differs from the next one's.
-- `src/lib/media.ts` is loaded by plain Node (the builder): no Astro module, no other file of ours. It lays its cache out like the URLs (`{md5}/original{ext}`, `{md5}/{width}{ext}.webp`, meta in `.meta`) so Caddy can serve it. `src/pages/media/` serves `npm run dev` only.
-- Caddy answers every GET from its own folder or with a 404 (pages, `/_astro`, `/media`, the 404 page), and `/` with a redirect by `Accept-Language`; any other method outside `/api/` is a 405. Only `/api/*` reaches the app.
+- Filters, sorting and search are POST forms (this approach's way, not a rule of the contract) and a filtered view has no address of its own: a query string on a page's URL would reach Caddy, which serves the unfiltered file. The form posts to `/api/page/{region}/{path}` (`src/pages/api/page/`, named by the forms' `action`), never to the page's own URL: files and app are told apart by path alone, so a CDN needs one rule, `/api/*`.
+- `scripts/watch.mjs` (builder, one) builds in `site/builds/`, copies the build to `SHARE_DIR`, last writes `current.json`; before that it makes every `/media` URL itself (`src/lib/media.ts`; never by asking the app, whose old version would answer 404, read as "not in NovaDB"); an error stops the build: no pages without pictures. `scripts/sync.mjs` (beside each Caddy) copies build and pictures into Caddy's own folder and swaps its symlink `current`; Caddy never reads the share. `scripts/start.mjs` (the app) waits for a build of its own `CODE_VERSION` and imports its `server/` once.
+- `src/lib/media.ts` is loaded by plain Node (the builder): no Astro module, no other file of ours. It lays its cache out like the URLs, meta in `.meta`, so Caddy can serve it. `src/pages/media/` serves `npm run dev` only.
+- Caddy answers every GET from its own folder or with a 404 (pages, `/_astro`, `/media`), and `/` with a redirect by `Accept-Language`; any other method outside `/api/` is a 405. Only `/api/*` reaches the app.
 - The builder polls `updateInfo` (`changeTrackingVersion` moves with every transaction of any branch: a needless build is normal, a missed one a bug).
 - `SITE_URL` is required: pre-rendered pages hold it in their canonical and hreflang URLs, so they cannot follow `X-Forwarded-*`. The 404 page is one file for the whole site, in English.
-- The site writes no query string and reads none (a foreign one is ignored): filters, sorting and search are POST forms answered with the page itself, so a filtered view has no URL of its own, on purpose.
 - `Range.astro` renders `section#range` with `data-autosubmit`; `site.js` replaces that section by the same section of the POST's answer and reuses cards by their HTML. Keep the markup of the card, the facets and the "Show more" button as it is.
 - `src/styles/site.css`, `src/scripts/site.js`, `NOVADB.md` and everything in `public/` (`favicon.svg`, `novadb.svg`, `github.svg`, `robots.txt`, the fonts) are shared files, kept identical from outside this repository: never adapt them. `site.css` is also the CMS editor's stylesheet. Only how they reach the browser (Astro bundles the two under `src/`) is this demo's own.
 - Page content is made from a closed set of components (classes `merch*`): compose them before asking for a new one.
@@ -68,4 +67,4 @@ Before touching `src/lib/` or the content components read `NOVADB.md`: the model
 
 ## Deployment
 
-Three parts (`compose.yaml`): `web` (official Caddy image, `Caddyfile`, the public port; `sync` beside it; `SITE_ADDRESS` is its host name), `app` and `builder` (this `Dockerfile`: `scripts/start.mjs`, `scripts/watch.mjs`; `scripts/sync.mjs`). Builder and app share one volume (`SHARE_DIR`); Caddy reaches the app at `APP_ADDRESS`. Caddy and the app run in any number, the builder once. It needs its environment (see NovaDB) from the platform's secrets, `SITE_URL` the public origin. Never push images, deploy or change DNS without explicit approval.
+Three parts (`compose.yaml`): `web` (Caddy image, `Caddyfile`, the public port; `sync` beside it), `app` and `builder` (this `Dockerfile`: `scripts/start.mjs`, `scripts/watch.mjs`; `scripts/sync.mjs`). Builder and app share one volume (`SHARE_DIR`); Caddy reaches the app at `APP_ADDRESS`. Caddy and the app run in any number, the builder once. It needs its environment (see NovaDB) from the platform's secrets, `SITE_URL` the public origin. Never push images, deploy or change DNS without explicit approval.
