@@ -11,7 +11,7 @@ const [first, ...rest] = node?.children ?? [];
 const Tag = (node?.element || "div") as "div"; // the CMS names the element; typed as one so that its attributes check
 ---
 {node ? (
-  // The root node (`visualComponentRoot`) comes from the CMS as `<div class="main">`: the `.main` of site.css.
+  // The root node (`merchComponentRoot`) comes from the CMS as `<div class="main">`: the `.main` of site.css.
   <Tag class={node.class}>
     {first && <ContentNode node={first} ctx={ctx} />}
     <slot />
